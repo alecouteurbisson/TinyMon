@@ -102,13 +102,13 @@ ESC		EQU	$1B
 SPACE		EQU	$20
 DELETE		EQU	$7F
 
-BADNUM          EQU     $1
+BADNUM          EQU     1
+BADCMD          EQU     2
 
 		ORG	START
 		
 ENTRY:		MOVE.L	VECTORS, D0
-*		DC.L    $4E7B0801   
-                * MOVEC	D0, VBR
+*		DC.L    $4E7B0801               ; MOVEC	D0, VBR
                 MOVEA.L #STACK, SP
                 MOVE.B  #0, ERROR
                 BSR.W	INITDUART
@@ -153,7 +153,39 @@ ENTRY:		MOVE.L	VECTORS, D0
 		BSR     CRLF
 		TRAP	#11
 		DC.W	0
+
 		
+CMDLOOP         MOVE.B  (ERROR), D0             ; Check for error in previous command
+                BEQ     .GETCMD
+                SUBQ    #1, D0                  ; Get error message
+                ASL     #4, D0
+                LEA.L   (ERRORTAB), A0
+                ADDA    D0, A0
+                BSR     OUTSLN                  ; Print it
+.GETCMD         BSR.W   GETLINE
+                MOVE    D0, (A0)                ; Get two character command into D0
+                AND     #~$2020, D0             ; Uppercase both characters
+                LEA.L   (CMDTAB), A0
+.NEXT           CMP     (A0), D0
+                BEQ     .DISPATCH
+                TST     (A0)
+                BEQ     .BADCMD
+                ADDA    #6, A0
+                BRA     .NEXT
+.DISPATCH       JMP     (2,A0)                  ; Dispatch command
+.BADCMD         MOVE.B  #BADCMD, (ERROR)
+                BRA     CMDLOOP
+
+DRCMD           BSR     DUMPREGS
+                BRA     CMDLOOP
+                
+DMCMD           MOVEA.L #$500, A0               ; Dump memory in hex and ASCII
+		MOVE.L	#$100, D1
+		BSR.W	DUMPMEM
+		BSR.W	CRLF
+		BRA     CMDLOOP
+
+; FOR DEBUGGING THE MONITOR                		
 PRREGS          MOVEM.L D0-D7/A0-A7, USERD0	; Save Registers
                 MOVE    SR, USERSR
                 BSR     DUMPREGS
@@ -631,8 +663,21 @@ MAINLOOP
 				
 HELLO		DC.B	'AJBMON for Tiny68k', 0	
 
+CMDTAB          DC.B    'DR'
+                DC.L    DRCMD
+                
+                DC.B    'DM'
+                DC.L    DMCMD
+                
+                DC.W    0
+                
+ERRORTAB        DC.B    'BAD NUMBER', 0, 0, 0, 0, 0, 0
+                DC.B    'BAD COMMAND', 0, 0, 0, 0, 0
+
 		
 		END	ENTRY		 ; last line of source
+
+
 
 
 
