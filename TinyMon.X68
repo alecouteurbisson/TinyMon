@@ -110,7 +110,8 @@ LA07     	DS.B 	1			* sector
 INBUFSZ		EQU	80                      ; User input buffer
 INBUF		DS.B	INBUFSZ+2
 
-CURRENT         DS.L    1                       ; Current address for commands
+CONTINUE        DS.L    1                       ; Continue address for commands
+CONTSIZE        DS.L    1
 
 DATAEND         DS.W    0
 
@@ -129,20 +130,17 @@ DELETE		EQU	$7F
 BADNUM          EQU     1
 BADCMD          EQU     2
 
-FLAGVAL         EQU     $A9C5                   ;
 
 		ORG	START
 
 ENTRY:		MOVEA.L #STACK, SP
                 MOVE.L	VECTORS, D0
                 ST      (M68010)                ; Assume a 68010
-                MOVE.L  #FLAGVAL, CURRENT
-		DC.L    $4E7B0801               ; MOVEC	D0, VBR
+MOVECADR        DC.L    $4E7B0801               ; MOVEC	D0, VBR
                 BRA     DOINIT
 M68000          MOVEA.L #STACK, SP              ; Clear exception stack frame
                 SF      (68010)                 ; Not a 68010
-DOINIT          CLR.L   (CURRENT)
-                BSR.W   DATAINIT
+DOINIT          BSR.W   DATAINIT
                 MOVE.L	#STACK, USERSP
                 BSR.W	INITDUART
                 BSR.W   CRLF
@@ -249,9 +247,29 @@ DMCMD           ADDA    #2, A0                  ; Move past command
 		BSR.W	DUMPMEM
 		BSR.W	CRLF
 		BRA     CMDLOOP
+		
+DISASMCMD       ADDA    #2, A0                  ; Move past command
+                BSR     READARGS                ; Dump memory in hex and ASCII
+                TST.B   ERROR
+                BNE     CMDLOOP                 ; Bail on an error
+                MOVEA.L A1, A4
+.NEXT           BSR     DISASM
+                BSR     OUTSLN
+                CMPA.L  D2, A4
+                BLO     .NEXT
+                BRA	CMDLOOP
 
+
+; Fetch 'start:end' or 'start size' arguments for memory commands
+; A0 = Start
+; D1 = Size
+; D2 = End
 READARGS        BSR     SKIPWS                  ; Space after command
-                BSR     PARSENUM
+                BNE     .PARSEARGS               
+                MOVEA.L CONTINUE, A1            ; Continue with previous end and size
+                MOVE.L  CONTSIZE, D1
+                BRA     .DONE 
+.PARSEARGS      BSR     PARSENUM
                 TST.B   ERROR
                 BNE     .ERR
                 MOVE.L  D1, A1                  ; Initial address to A1
@@ -265,10 +283,16 @@ READARGS        BSR     SKIPWS                  ; Space after command
                 BNE     .ERR
                 SUB.L   A1, D1                  ; Subtract to get byte length in D1
                 BMI     .ERR
-                RTS
+                BRA     .DONE
 .SIZE           BSR     PARSENUM                ; x y is from x for y bytes
                 TST.B   ERROR
                 BNE     .ERR
+.DONE           BCLR    #0, D0                  ; Ensure we are on word boundaries
+                BCLR    #0, D1
+                MOVE.L  A1, D2
+                ADD.L   D1, D2                  ; Continue from here
+                MOVE.L  D2, CONTINUE
+                MOVE.L  D1, CONTSIZE
                 RTS                             ; Byte length in D1
 .ERR            MOVE.B  #BADNUM, ERROR
                 RTS
@@ -515,6 +539,8 @@ DATAINIT	LEA	(USERD0).L, A0
 .NEXT           MOVE.W  D1, -(A0)
                 SUBQ    #1, D1
                 DBRA    D0, .NEXT
+                MOVE.L  #$10000, CONTINUE
+                MOVE.L  #$20, CONTSIZE
 		RTS
 
 INITDUART	MOVEA.L #DUART, A6		; A6 points at DUART base
@@ -973,7 +999,7 @@ ILLEGAL         BTST.B  #5, 1(SP)               ; Test the supervisor flag
 .DOBKPT
 
 ; Illegal instruction trap in supervisor mode
-.SUPER          CMP     #FLAGVAL, (CURRENT)     ; Is this the processor test?
+.SUPER          CMP     #MOVECADR, 2(SP)        ; Is this the processor test?
                 BEQ     M68000                  ; We detected an M68000
                 LEA     (ILLMSG), A0
                 BSR     OUTSLN
@@ -1037,6 +1063,9 @@ CMDTAB          DC.B    'DR'                    ; Dump Registers
 
                 DC.B    'DM'                    ; Dump Memory
                 DC.L    DMCMD
+                
+                DC.B    'DI'
+                DC.L    DISASMCMD
 
                 DC.B    'SR'                    ; Status Register
                 DC.L    SRREGCMD
@@ -1065,6 +1094,8 @@ ERRORTAB        DC.B    'BAD NUMBER', 0, 0, 0, 0, 0, 0
 
 
 		END	ENTRY		 ; last line of source
+
+
 
 
 
