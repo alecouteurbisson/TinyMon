@@ -30,22 +30,31 @@ IVR		EQU	$19			; Interrupt Vector Register	(R/W)
 SOPB		EQU	$1D			; Set Output Port Bits Register (W)
 COPB            EQU     $1F                     ; Clr Output Port Bits Register (W)
 
-*START		EQU	$400
-*RAMEND		EQU	$FF8000
-*DATA		EQU	RAMEND - $1000			; Monitor data area
-*STACK		EQU	DATA - 2
-*VECTORS	EQU	$0
+DEV             EQU     1
 
-* Development config
-
-
-RAMEND		EQU	$400000
-STACK		EQU	RAMEND-2
+                IFEQ    DEV
+* ROM config
+VECTORS 	EQU	$0
+DATA		EQU	$400                    ; Monitor data area
+START		EQU	DATA+$400
+RAMEND		EQU	$FF7FF0
+STACK		EQU	RAMEND - 2
 USERSTACK       EQU     STACK-$400
-VECTORS		EQU	$8000
+PROG            EQU     $4000
+                ENDC
+
+
+
+                IFNE    DEV
+* Development config
+VECTORS         EQU	$8000
 DATA		EQU	VECTORS+$400
 START		EQU	DATA+$400
-
+RAMEND		EQU	$FF7FF0
+STACK		EQU	RAMEND-2
+USERSTACK       EQU     STACK-$400
+PROG            EQU     $10000
+                ENDC
 
 
 *********************************
@@ -58,13 +67,51 @@ START		EQU	DATA+$400
 		DC.L	BUSERR			* BERR handler
 		DC.L	ADDRERR			* Address error handler
 		DC.L	ILLEGAL			* Illegal instruction handler also implements breakpoints
-		DCB.L	4,UNKNOWN
+		DC.L	UNKNOWN                 * Zero divide
+		DC.L	UNKNOWN                 * CHK
+		DC.L	UNKNOWN                 * TRAPV
+		DC.L	UNKNOWN                 * Privilege violation
 		DC.L	TRACE			* Trace handling
-		DCB.L	33,UNKNOWN
-		DC.L    TRAP11
-		DCB.L	3,UNKNOWN
-		DC.L	TRAP15			* Trap 15 implementing EASy68K trap services
-		DCB.L	208,UNKNOWN
+		DC.L	UNKNOWN                 * Line A emulation
+		DC.L	UNKNOWN                 * Line B emulation
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Format error
+		DC.L	UNKNOWN                 * Uninitialised interrupt vector
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Reserved
+		DC.L	UNKNOWN                 * Spurious interrupt
+		DC.L	NMI                     * Level 1 interrupt autovector
+		DC.L	NMI                     * Level 2 interrupt autovector
+		DC.L	NMI                     * Level 3 interrupt autovector
+		DC.L	NMI                     * Level 4 interrupt autovector
+		DC.L	NMI                     * Level 5 interrupt autovector
+		DC.L	NMI                     * Level 6 interrupt autovector
+		DC.L	NMI                     * Level 7 interrupt autovector (NMI)
+		DC.L	UNKNOWN                 * Trap 0
+		DC.L	UNKNOWN                 * Trap 1
+		DC.L	UNKNOWN                 * Trap 2
+		DC.L	UNKNOWN                 * Trap 3
+		DC.L	UNKNOWN                 * Trap 4
+		DC.L	UNKNOWN                 * Trap 5
+		DC.L	UNKNOWN                 * Trap 6
+		DC.L	UNKNOWN                 * Trap 7
+		DC.L	UNKNOWN                 * Trap 8
+		DC.L	UNKNOWN                 * Trap 9
+		DC.L	UNKNOWN                 * Trap 10
+		DC.L    TRAP11                  * Trap 11
+		DC.L	UNKNOWN                 * Trap 12
+		DC.L	UNKNOWN                 * Trap 13
+		DC.L	UNKNOWN                 * Trap 14
+		DC.L	UNKNOWN			* Trap 15 implementing EASy68K trap services
+		DCB.L	16,UNKNOWN              * Reserved
+		DCB.L	192,UNKNOWN             * User interrupt vectors		
 
 		ORG DATA
 
@@ -95,9 +142,10 @@ USERSR		DS.W	1
 BKPTS           DS.L    8                       ; Breakpoint addresses (0 if not set)
 BKPTINS         DS.W    8                       ; Swapped out instruction at breakpoint address
 BKPTSON         DC.B    1                       ; Set if breakpoints are installed
+SETPKPTS        DC.B    1                       ; Set if we need to install the breakpoints
+TRACEMODE       DC.B    1
 
 ERROR		DS.B	1                       ; Error code for monitor commands
-M68010          DS.B    1                       ; Set if 68010 processor
 
                 DS.W    0
 LA2427   	DS.B 	1			* head
@@ -110,10 +158,16 @@ LA07     	DS.B 	1			* sector
 INBUFSZ		EQU	80                      ; User input buffer
 INBUF		DS.B	INBUFSZ+2
 
+ASMBUFSZ        EQU     80
+ASMBUF          DS.B    ASMBUFSZ+2
+                
 CONTINUE        DS.L    1                       ; Continue address for commands
 CONTSIZE        DS.L    1
 
 DATAEND         DS.W    0
+
+M68010          DS.B    1                       ; Set if 68010 processor
+                DS.W    0
 
 BKPT0           EQU     $4848                   ; BKPT #0 instruction
 
@@ -134,20 +188,25 @@ BADCMD          EQU     2
 		ORG	START
 
 ENTRY:		MOVEA.L #STACK, SP
-                MOVE.L	VECTORS, D0
-                ST      (M68010)                ; Assume a 68010
+                MOVE.L	#VECTORS, D0
+                ST      M68010                  ; Assume a 68010
 MOVECADR        DC.L    $4E7B0801               ; MOVEC	D0, VBR
                 BRA     DOINIT
 M68000          MOVEA.L #STACK, SP              ; Clear exception stack frame
-                SF      (68010)                 ; Not a 68010
+                SF      M68010                  ; Not a 68010
 DOINIT          BSR.W   DATAINIT
-                MOVE.L	#STACK, USERSP
                 BSR.W	INITDUART
                 BSR.W   CRLF
 		LEA	(HELLO).L, A0           ; Print startup message
 		BSR.W	OUTSLN
+		LEA     P00, A0
+		TST.B   M68010
+		BEQ     .PRPROC
+		LEA     P10, A0
+.PRPROC         BSR     OUTSLN
 
-CMDLOOP         MOVE.B  (ERROR), D0             ; Check for error in previous command
+CMDLOOP         MOVEA.L #STACK, SP              ; Reset the stack
+                MOVE.B  ERROR, D0               ; Check for error in previous command
                 EXT.W   D0
                 BEQ     .GETCMD
                 SUBQ    #1, D0                  ; Get error message
@@ -155,7 +214,7 @@ CMDLOOP         MOVE.B  (ERROR), D0             ; Check for error in previous co
                 LEA.L   (ERRORTAB), A0
                 ADDA.W  D0, A0
                 BSR     OUTSLN                  ; Print it
-                CLR.B   (ERROR)                 ; Clear error condition
+                CLR.B   ERROR                   ; Clear error condition
 .GETCMD         LEA.L   (PROMPT), A0
                 BSR     OUTS
                 BSR.W   GETLINE
@@ -176,9 +235,28 @@ CMDLOOP         MOVE.B  (ERROR), D0             ; Check for error in previous co
                 BRA     .NEXT
 .DISPATCH       MOVE.L  (2,A2), A2
                 JMP     (A2)                    ; Dispatch command
-EBADCMD         MOVE.B  #BADCMD, (ERROR)
+EBADCMD         MOVE.B  #BADCMD, ERROR
                 BRA     CMDLOOP
+                
+P00             DC.B    'M68000', 0
+P10             DC.B    'M68010', 0
+                DS.W    0
 
+; Execute user code
+;
+GOCMD           ADDA    #2, A0                  ; Move past command
+                BSR     SKIPWS                  ; Space after command
+                BEQ     .GO               
+                BSR     PARSENUM
+                TST.B   ERROR
+                BNE     CMDLOOP
+                MOVE.L  D1, USERPC              ; Update PC
+.GO             AND     #$07FF, USERSR          ; Clear supervisor and trace flags
+                MOVE    USERSR, SR              ; Restore CCR and enter user mode 
+                MOVEM.L USERD0, D0-D7/A0-A7     ; Restore registers
+                MOVE.L  USERPC, -(SP)           ; Push user PC         
+                RTS                             ; Goto user PC
+                        
 ; Read/modify registers
 ;
 SPREGCMD        LEA     USERSP, A1
@@ -235,7 +313,7 @@ REGCMD          ADDA    #2, A0                  ; Move past command
 
 ; Dump registers
 ;
-DRCMD           BSR     DUMPREGS
+DRCMD           BSR     DUMPREGSDIS
                 BRA     CMDLOOP
 
 ; Dump memory
@@ -271,7 +349,7 @@ READARGS        BSR     SKIPWS                  ; Space after command
                 BRA     .DONE 
 .PARSEARGS      BSR     PARSENUM
                 TST.B   ERROR
-                BNE     .ERR
+                BNE     CMDLOOP
                 MOVE.L  D1, A1                  ; Initial address to A1
                 BSR     SKIPWS
                 CMP.B   #':', (A0)              ; x:y is the range from x to y
@@ -286,7 +364,7 @@ READARGS        BSR     SKIPWS                  ; Space after command
                 BRA     .DONE
 .SIZE           BSR     PARSENUM                ; x y is from x for y bytes
                 TST.B   ERROR
-                BNE     .ERR
+                BNE     CMDLOOP
 .DONE           BCLR    #0, D0                  ; Ensure we are on word boundaries
                 BCLR    #0, D1
                 MOVE.L  A1, D2
@@ -295,7 +373,6 @@ READARGS        BSR     SKIPWS                  ; Space after command
                 MOVE.L  D1, CONTSIZE
                 RTS                             ; Byte length in D1
 .ERR            MOVE.B  #BADNUM, ERROR
-                RTS
 
 ; Breakpoint list
 ;
@@ -318,6 +395,113 @@ BPLSTCMD        LEA     (BKPTS), A2
                 BSR     OUTSLN
                 BRA     .NEXT
 
+TESTCMD         DC.L    $4E7A0801               ; MOVEC VBR, D0
+                BSR     PRHEX8
+                BSR     CRLF
+                BRA     CMDLOOP
+                
+************************************************************************
+*                  A3 = STORE POINTER
+*                  A4 = PROGRAM COUNTER
+*                  A5 = POINTER TO DATA TO ASSEMBLE
+*                  A6 = POINTER TO END OF SOURCE DATA
+*         BSR       CODE68K             ASSEMBLE
+*                  A3 = POINTER TO LINE ASSEMBLED
+*                  A4 = PROGRAM COUNTER
+*                  A6 = POINTER END OF LINE ASSEMBLED
+*                  D0-D2 = DATA ASSEMBLED
+*                  D6 = NUMBER OF BYTES ASSEMBLED
+*                  D7 = ERROR FLAG & POSITION OF ERROR
+
+*         MOVE.L    A3,A5
+*         ADD.L     #78,A3              A3 = MAX LINE
+*MMDI26   CMP.L     A6,A3
+*         BCS.S     MMDI27
+*         MOVE.B    #' ',(A6)+          SPACE FILL LINE
+*         BRA       MMDI26
+*MMDI27   BSR       OUT1CR              PRINT LINE JUST ENTERED
+*
+*         TST.B     D7
+*         BNE.S     MMDI30              ERROR; DON'T STORE DATA
+*
+*         LEA       SYSTACK+4,A2        A2 = TEMP AREA
+*         MOVEM.L   D0/D1/D2,-(A2)      STORE DATA
+*         MOVE.L    D6,D1               D1 = NUMBER OF BYTES TO STORE
+*         SUB.L     #1,D1
+*         MOVE.L    A4,A1               A1 = DATA STORE POINTER
+*MMDI29   MOVE.B    (A2)+,D0
+*         MOVE.B    D0,(A1)
+*         MOVE.B    (A1)+,D2            ENSURE DATA STORED
+*         CMP.B     D0,D2
+*         BNE       MM90
+*         DBRA      D1,MMDI29
+*         BRA       MMDI22
+*************************************************************************
+
+ASSEMCMD        ADDA    #2, A0                  ; Move past command
+                BSR     SKIPWS                  ; Space after command
+                BNE     .PARSEADDR               
+                MOVEA.L CONTINUE, A4
+                BRA     .NEXT
+.PARSEADDR      BSR     PARSENUM
+                TST.B   ERROR
+                BNE     CMDLOOP
+                MOVEA.L D1, A4                  ; Initial address to A4
+.NEXT           MOVE.L  A4, D0
+                AND.L   #$FFFFFF, D0            ; Set assembly PC high byte to zero
+                MOVEA.L D0, A4
+                BSR     PRHEX6                  ; Prompt with address
+                MOVE    #2, D0
+                BSR     SPACES
+                BSR     GETLINE                 ; Read assembly input
+                MOVEA.L A0, A5                  ; Input to assemble
+                MOVEA.L A0, A6
+                ADDA    D1, A6                  ; End of input
+                LEA     ASMBUF, A3
+                
+                BSR     PRREGS
+                
+                MOVE.L  D1, -(SP)
+                MOVEA.L A5, A1
+                MOVE.L  #80, D1
+                BSR     DUMPMEM
+                MOVE.L  (SP)+, D1
+                
+                BSR     CODE68K                 ; Assemble
+                
+                BSR     PRREGS
+               
+                MOVE.L  D1, -(SP)
+                MOVEA.L A3, A1
+                MOVE.L  #80, D1
+                BSR     DUMPMEM
+                MOVE.L  (SP)+, D1
+                
+                MOVEA.L A3, A0
+                CLR.B   1(A6)                   ; Null terminate
+
+                BSR     OUTSLN
+                TST     D7
+                BEQ     .ASMOK
+                MOVE    D7, D0
+                SUBQ    #1, D0
+                BSR     SPACES
+                MOVE    #'^', D0
+                BSR     OUTCH
+                BSR     CRLF
+                BRA     .NEXT
+.ASMOK          MOVE.B  #0, 1(A6)               ; Null terminate
+                MOVEA.L A3, A0
+                BSR     OUTSLN
+                MOVE    D0, (A4)+
+                SUBQ    #2, D6
+                BEQ     .NEXT
+                MOVE    D1, (A4)+
+                SUBQ    #2, D6
+                BEQ     .NEXT
+                MOVE    D2, (A4)+
+                BRA     .NEXT
+             
 
 * boot CP/M 68K from compact flash
 * The program is stored starting from Logical Address 1
@@ -433,45 +617,6 @@ DISASM          MOVEM.L D0-D7/A1-A3/A5-A6, -(SP)
 		BSR.W	DUMPMEM
 		BSR.W	CRLF
 
-************************************************************************
-*                  A3 = STORE POINTER
-*                  A4 = PROGRAM COUNTER
-*                  A5 = POINTER TO DATA TO ASSEMBLE
-*                  A6 = POINTER TO END OF SOURCE DATA
-*         BSR       CODE68K             ASSEMBLE
-*                  A3 = POINTER TO LINE ASSEMBLED
-*                  A4 = PROGRAM COUNTER
-*                  A6 = POINTER END OF LINE ASSEMBLED
-*                  D0-D2 = DATA ASSEMBLED
-*                  D6 = NUMBER OF BYTES ASSEMBLED
-*                  D7 = ERROR FLAG & POSITION OF ERROR
-
-*         MOVE.L    A3,A5
-*         ADD.L     #78,A3              A3 = MAX LINE
-*MMDI26   CMP.L     A6,A3
-*         BCS.S     MMDI27
-*         MOVE.B    #' ',(A6)+          SPACE FILL LINE
-*         BRA       MMDI26
-*MMDI27   BSR       OUT1CR              PRINT LINE JUST ENTERED
-*
-*         TST.B     D7
-*         BNE.S     MMDI30              ERROR; DON'T STORE DATA
-*
-*         LEA       SYSTACK+4,A2        A2 = TEMP AREA
-*         MOVEM.L   D0/D1/D2,-(A2)      STORE DATA
-*         MOVE.L    D6,D1               D1 = NUMBER OF BYTES TO STORE
-*         SUB.L     #1,D1
-*         MOVE.L    A4,A1               A1 = DATA STORE POINTER
-*MMDI29   MOVE.B    (A2)+,D0
-*         MOVE.B    D0,(A1)
-*         MOVE.B    (A1)+,D2            INSURE DATA STORED
-*         CMP.B     D0,D2
-*         BNE       MM90
-*         DBRA      D1,MMDI29
-*         BRA       MMDI22
-*************************************************************************
-
-
 .LOOP		BSR.W	GETLINE                 ; Read user input to (A0)
                 MOVE.L  A0, -(SP)
                 BSR.W   OUTSLN                  ; Print what the user typed
@@ -521,16 +666,17 @@ OUTBUF          DS.B    82
 
 
 ; FOR DEBUGGING THE MONITOR
-PRREGS          MOVEM.L D0-D7/A0-A7, USERD0	; Save Registers
+PRREGS          MOVEM.L D0-D7/A0-A6, USERD0	; Save Registers
                 MOVE    SR, USERSR
                 BSR     DUMPREGS
                 MOVEM.L USERD0, D0-D7/A0-A6
+                MOVE    USERSR, SR
                 RTS
 
 
 ; Initialise data area
 DATAINIT	LEA	(USERD0).L, A0
-		MOVE.W	#(DATAEND-USERD0)/4, D0
+		MOVE.W	#(DATAEND-USERD0)/4-1, D0
 .LOOP		MOVE.L	#0, (A0)+
 		DBRA	D0, .LOOP
 		MOVE.W  #7, D0
@@ -539,8 +685,10 @@ DATAINIT	LEA	(USERD0).L, A0
 .NEXT           MOVE.W  D1, -(A0)
                 SUBQ    #1, D1
                 DBRA    D0, .NEXT
-                MOVE.L  #$10000, CONTINUE
+                MOVE.L  #PROG, CONTINUE
                 MOVE.L  #$20, CONTSIZE
+                MOVE.L  #USERSTACK, USERSP
+                MOVE.L  #PROG, USERPC
 		RTS
 
 INITDUART	MOVEA.L #DUART, A6		; A6 points at DUART base
@@ -577,8 +725,8 @@ GETLINEUSR	MOVE.L D0, -(SP)
 ; Get a line into the line buffer INBUF
 ; Returns line length in D1
 ; Buffer is null terminated
-GETLINE		LEA	INBUF, A0
-		MOVEM.L D0/D2, -(SP)
+GETLINE		MOVEM.L D0/D2, -(SP)
+                LEA	INBUF, A0
 		MOVE.W	#INBUFSZ, D2
 		BSR.S	GETLINEAUX
 		MOVEM.L (SP)+, D0/D2
@@ -697,6 +845,13 @@ PRHEX4		MOVE.L	D0, -(SP)
 		RTS
 
 ; Print a hex long word in D0.L - All registers preserved
+PRHEX6		SWAP	D0
+		BSR.S	PRHEX2
+		SWAP	D0
+		BSR.S	PRHEX4
+		RTS
+		
+; Print a hex long word in D0.L - All registers preserved
 PRHEX8		SWAP	D0
 		BSR.S	PRHEX4
 		SWAP	D0
@@ -726,20 +881,9 @@ SPACES		MOVE.L  D1, -(SP)
 		MOVE.L  (SP)+, D1
 		RTS
 
-; Dump the User mode registers
-DUMPREGS	MOVEM.L D0-D1/A0, -(SP)
-		MOVEQ	#0, D1			 ; Register index
-		LEA	USERD0, A0
-.NEXT		BSR.S	DUMPREG			 ; Dump one address or data register
-		ADDI	#1, D1
-		MOVE.B	D1, D0
-		ANDI.B	#3, D0
-		BNE.S	.NEXT
-		BSR.W	RHS			  ; Print the SR and PC on the RHS
-		BSR.W	CRLF
-		CMPI.B	#$10, D1		  ; Do all 16
-		BLT.S	.NEXT
-		BSR.W	CRLF
+; Dump registers and disassemble at PC
+; Disassembles into INBUF
+DUMPREGSDIS	BSR     DUMPREGSNPC     		
 		LEA.L	PCLEGEND, A0		  ; Print PC =
 		BSR.W	OUTS
 		MOVE.L	(USERPC), A4              ; Print PC and disassembly
@@ -751,12 +895,38 @@ DUMPREGS	MOVEM.L D0-D1/A0, -(SP)
 		MOVEA.L A5, A0
 		MOVE.B  #0, 1(A6)
 		BSR     OUTSLN
+		RTS
+
+; Dump registers without disassembly
+; Does not destroy INBUF or registers		
+DUMPREGS	MOVEM.L D0-D1/A0, -(SP)
+                BSR     DUMPREGSNPC     		
+		LEA.L	PCLEGEND, A0		  ; Print PC =
+		BSR.W	OUTS
+		MOVE.L	(USERPC), D0              ; Print PC and disassembly
+		BSR.W	PRHEX8
+		BSR.W   CRLF
 		MOVEM.L (SP)+, D0-D1/A0
+		RTS
+        		
+; Dump the User mode registers without the PC
+DUMPREGSNPC	MOVEQ	#0, D1			 ; Register index
+		LEA	USERD0, A0
+.NEXT		BSR.S	DUMPREG			 ; Dump one address or data register
+		ADDI	#1, D1
+		MOVE.B	D1, D0
+		ANDI.B	#3, D0
+		BNE.S	.NEXT
+		BSR.W	RHS			  ; Print the SR and PC on the RHS
+		BSR.W	CRLF
+		CMPI.B	#$10, D1		  ; Do all 16
+		BLT.S	.NEXT
+		BSR.W	CRLF
 		RTS
 
 ;D1 is an index into the User Registers
 DUMPREG		MOVEQ	#2, D0
-		BSR.S	SPACES
+		BSR.W	SPACES
 		MOVE.B	#'D', D0
 		CMPI.B	#8, D1
 		BLT.S	.DREG
@@ -983,27 +1153,42 @@ T11VEND
 
 BUSERR
 ADDRERR
-ILLEGAL         BTST.B  #5, 1(SP)               ; Test the supervisor flag
-                BNE     .SUPER
-                MOVEM.L D0-D7/A0-A7, (USERD0)   ; Save user mode registers
-                MOVE    (SP)+, (USERSR)
-                MOVE.L  (SP)+, (USERPC)
-                MOVE    (USERPC), D0            ; Get faulted instruction
-                BSR     SWAPBKPTS               ; Swap out the breakpoints
-                AND     #~$7, D0                ; Test for BKPT instruction
-                CMP     #BKPT0, D0              ; A breakpoint has been hit
-                BEQ     .DOBKPT
+ILLEGAL
+*               BTST.B  #5, 1(SP)               ; Test the supervisor flag
+*                BNE     .SUPER
+                MOVEM.L D0-D7/A0-A7, USERD0     ; Save user mode registers
+                MOVE    USP, A0
+                MOVE.L  A0, USERSP
+                MOVE    (SP)+, USERSR
+                MOVE.L  (SP)+, USERPC
+*                MOVEA   USERPC, A0              ; Get faulted instruction
+*                MOVE    (A0), D1
+*                BSR     SWAPBKPTS               ; Swap out the breakpoints
+*                AND     #~$7, D0                ; Test for BKPT instruction
+*                CMP     #BKPT0, D0              ; A breakpoint has been hit
+*                BEQ     .DOBKPT
+                LEA     ILLMSG, A0
+                BSR     OUTSLN
+                BSR     DUMPREGS
+                BRA     CMDLOOP
 
 
-                ; DO MORE STUFF HERE
-.DOBKPT
+.DOBKPT         MOVEA   BKPTMSG, A0
+                BSR     OUTS
+                AND.B   #7, D1
+                ADD.B   #'0', D1
+                MOVE.B  D1, D0
+                BSR     OUTCH
+                BSR     CRLF          
+                BSR     DUMPREGS
+                BRA     CMDLOOP
 
 ; Illegal instruction trap in supervisor mode
 .SUPER          CMP     #MOVECADR, 2(SP)        ; Is this the processor test?
                 BEQ     M68000                  ; We detected an M68000
-                LEA     (ILLMSG), A0
+                LEA     ILLMSG, A0
                 BSR     OUTSLN
-                LEA     (PCMSG), A0
+                LEA     PCMSG, A0
                 BSR     OUTS
                 ADD     #2, SP
                 MOVE.L  (SP)+, D0               ; Get faulted PC
@@ -1029,16 +1214,51 @@ SWAPBKPTS       MOVEQ   #7, D2
                 SEQ     BKPTSON
                 RTS
 
+NMI             MOVEA.L #STACK, A7              ; Reset the stack
+                BSR     INITDUART
+                LEA     NMIMSG, A0              ; Print message
+                BSR     OUTSLN
+                BRA     CMDLOOP                 ; Re-enter command loop
 
-ILLMSG         DC.B    'ILLEGAL INSTRUCTION EXCEPTION', 0
-BKPTMSG        DC.B    'BREAKPOINT ', 0
-PCMSG          DC.B    'PC = ', 0
+ILLMSG          DC.B    'ILLEGAL INSTRUCTION EXCEPTION', 0
+BKPTMSG         DC.B    'BREAKPOINT ', 0
+PCMSG           DC.B    'PC = ', 0
+NMIMSG          DC.B    'AJBMON WARM START', 0
+DOHMSG          DC.B    'DOH!', 0
                 DS.W    0
 
-UNKNOWN
-TRACE
+UNKNOWN         MOVEM.L D0-D7/A0-A7, USERD0     ; Save user mode registers
+                MOVE    (SP)+, USERSR
+                MOVE.L  (SP)+, USERPC         
+                MOVEA.L #STACK, A7              ; Reset the stack
+                BSR     INITDUART
+                LEA     DOHMSG, A0              ; Print message
+                BSR     OUTSLN
+                BSR     DUMPREGSDIS
+                BRA     CMDLOOP                 ; Re-enter command loop
 
-TRAP15          JMP     ENTRY
+; Trace traps will only occur in user code
+; A trace trap may occur when:
+;  1) We are in trace mode
+;     Save registers, dump registers and return to command line
+; 
+;  2) We have continued from a breakpoint
+;     TRACEMODE flag is clear, install breakpoints and continue
+;
+;  3) Both of the above
+;     Continue as 1)
+;
+; 
+TRACE           MOVEM.L D0-D7/A0-A7, USERD0     ; Save user mode registers
+                TST.B   TRACEMODE
+                BNE     .DOTRACE              
+                BSR     SWAPBKPTS               ; Not tracing, install breakpoints
+                BCLR    #15, (SP)               ; Clear trace flag in SR
+                MOVEM.L USERD0, D0-D7/A0-A7     ; Restore user regs
+                RTE                             ; Continue with breakpoints installed
+
+.DOTRACE        MOVE    (SP)+, USERSR
+                MOVE.L  (SP)+, USERPC
 
 
 
@@ -1058,7 +1278,10 @@ RUNCPM          DC.B    'CP/M-68K V1.3 COPYRIGHT (C) 1982, 1984, 1985 Digital Re
 
                 DS.W    0                       ; Move to even address
 
-CMDTAB          DC.B    'DR'                    ; Dump Registers
+CMDTAB          DC.B    'GO'                    ; Execute user code
+                DC.L    GOCMD
+
+                DC.B    'DR'                    ; Dump Registers
                 DC.L    DRCMD
 
                 DC.B    'DM'                    ; Dump Memory
@@ -1082,6 +1305,12 @@ CMDTAB          DC.B    'DR'                    ; Dump Registers
                 DC.B    'BO'                    ; Boot CP/M
                 DC.L    BOOTCPMCMD
 
+                DC.B    'AS'                    ; Assemble
+                DC.L    ASSEMCMD
+                
+                DC.B    'TS'                    ; Assemble
+                DC.L    TESTCMD
+                
                 DC.W    0
 
 ERRORTAB        DC.B    'BAD NUMBER', 0, 0, 0, 0, 0, 0
@@ -1093,7 +1322,18 @@ ERRORTAB        DC.B    'BAD NUMBER', 0, 0, 0, 0, 0, 0
                 INCLUDE 'CODE68K.X68'
 
 
-		END	ENTRY		 ; last line of source
+USERPROG        ORG     PROG
+                LEA     USERMSG, A0
+                BSR     OUTSLN
+                MOVE    #1, D1
+                MOVE    #2, D2
+                ILLEGAL
+                
+USERMSG         DC.B    'User code', 0                
+		END	ENTRY		        ; last line of source
+
+
+
 
 
 

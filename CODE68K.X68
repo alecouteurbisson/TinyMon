@@ -777,9 +777,9 @@ M300     MOVE.B    #' ',(A0)+          SPACE FILL BUFFER
          ROR.L     #1,D0
          BMI       ERDONE              PC ODD ADDRESS
  
-         MOVE.L    #FOL,D7             POSSIBLE ERROR CODE
-         CMP.B     #' ',(A5)+
-         BNE       ERDONE              1ST CHAR NOT SPACE
+*         MOVE.L    #FOL,D7             POSSIBLE ERROR CODE
+*         CMP.B     #' ',(A5)+
+*         BNE       ERDONE              1ST CHAR NOT SPACE
  
          MOVE.B    #2,TNB(A1)          INZ # OF BYTES
          MOVE.W    #$40,TLENGTH(A1)    SIZE = .W (DEFAULT)
