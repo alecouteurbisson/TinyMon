@@ -30,7 +30,7 @@ IVR		EQU	$19			; Interrupt Vector Register	(R/W)
 SOPB		EQU	$1D			; Set Output Port Bits Register (W)
 COPB            EQU     $1F                     ; Clr Output Port Bits Register (W)
 
-DEV             EQU     1
+DEV             EQU     0                       ; 1 = Dev mode, 0 = ROM mode
 
                 IFEQ    DEV
 * ROM config
@@ -94,7 +94,7 @@ PROG            EQU     $10000
 		DC.L	NMI                     * Level 5 interrupt autovector
 		DC.L	NMI                     * Level 6 interrupt autovector
 		DC.L	NMI                     * Level 7 interrupt autovector (NMI)
-		DC.L	UNKNOWN                 * Trap 0
+		DC.L	TRAP0                   * Trap 0
 		DC.L	UNKNOWN                 * Trap 1
 		DC.L	UNKNOWN                 * Trap 2
 		DC.L	UNKNOWN                 * Trap 3
@@ -243,7 +243,7 @@ P10             DC.B    'M68010', 0
                 DS.W    0
 
 ; Execute user code
-;
+
 GOCMD           ADDA    #2, A0                  ; Move past command
                 BSR     SKIPWS                  ; Space after command
                 BEQ     .GO               
@@ -251,11 +251,39 @@ GOCMD           ADDA    #2, A0                  ; Move past command
                 TST.B   ERROR
                 BNE     CMDLOOP
                 MOVE.L  D1, USERPC              ; Update PC
-.GO             AND     #$07FF, USERSR          ; Clear supervisor and trace flags
-                MOVE    USERSR, SR              ; Restore CCR and enter user mode 
-                MOVEM.L USERD0, D0-D7/A0-A7     ; Restore registers
-                MOVE.L  USERPC, -(SP)           ; Push user PC         
-                RTS                             ; Goto user PC
+.GO             TST.B   M68010
+                BEQ     .NOFMT
+                MOVE    #$0024, -(SP)           ; Dummy format 0 trace frame
+.NOFMT          MOVE.L  USERPC, -(SP)           ; Push user PC
+                MOVE    USERSR, D0
+                AND     #$07FF, D0              ; Clear supervisor and trace flags
+                MOVE    D0, -(SP)               ; Push SR
+                MOVE.L  USERSP, A0
+                MOVE.L  A0, USP
+                MOVEM.L USERD0, D0-D7/A0-A6     ; Restore registers
+                RTE 
+                
+; Trace user code
+;
+TRACECMD        ADDA    #2, A0                  ; Move past command
+                BSR     SKIPWS                  ; Space after command
+                BEQ     .GO               
+                BSR     PARSENUM
+                TST.B   ERROR
+                BNE     CMDLOOP
+                MOVE.L  D1, USERPC              ; Update PC
+.GO             TST.B   M68010
+                BEQ     .NOFMT
+                MOVE    #$0024, -(SP)           ; Dummy format 0 trace frame
+.NOFMT          MOVE.L  USERPC, -(SP)           ; Push user PC
+                MOVE    USERSR, D0
+                AND     #$07FF, D0              ; Clear supervisor and trace flags
+                OR      #$8000, D0              ; Set trace flag
+                MOVE    D0, -(SP)               ; Push SP
+                MOVE.L  USERSP, A0
+                MOVE.L  A0, USP
+                MOVEM.L USERD0, D0-D7/A0-A6     ; Restore registers
+                RTE 
                         
 ; Read/modify registers
 ;
@@ -352,7 +380,10 @@ READARGS        BSR     SKIPWS                  ; Space after command
                 BNE     CMDLOOP
                 MOVE.L  D1, A1                  ; Initial address to A1
                 BSR     SKIPWS
-                CMP.B   #':', (A0)              ; x:y is the range from x to y
+                BNE     .READNEXT
+                MOVE.L  CONTSIZE, D1            ; Default the size only
+                BRA     .DONE
+.READNEXT       CMP.B   #':', (A0)              ; x:y is the range from x to y
                 BNE     .SIZE
                 ADDQ    #1, A0                  ; Step over :
                 BSR     SKIPWS
@@ -653,7 +684,7 @@ DISASM          MOVEM.L D0-D7/A1-A3/A5-A6, -(SP)
 		BSR.W	DUMPMEM
 		BSR.W	CRLF
 		MOVE.W	#$A5C7, D0              ; Dump binary
-		BSR.W	PRBIN
+		BSR.W	PRBIN16
 		BSR     CRLF
 		TRAP	#11
 		DC.W	0
@@ -859,11 +890,23 @@ PRHEX8		SWAP	D0
 		RTS
 
 ; Print D0.W in binary
-PRBIN		MOVEM.L D0-D2, -(SP)
+PRBIN16		MOVEM.L D0-D2, -(SP)
 		MOVE.W	D0, D2
 		MOVE.W	#$0F, D1		  ; 16 bits
 .LOOP		MOVE.B	#$18, D0		  ; 2 * $18 is an ASCII '0'
 		LSL.W	#1, D2			  ; Add an extend bit and it becomes a '1'
+		ADDX.B	D0, D0
+		BSR.W	OUTCH
+		DBRA	D1, .LOOP
+		MOVEM.L (SP)+, D0-D2
+		RTS
+		
+		; Print D0.B in binary
+PRBIN8		MOVEM.L D0-D2, -(SP)
+		MOVE.W	D0, D2
+		MOVE.W	#$07, D1		  ; 8 bits
+.LOOP		MOVE.B	#$18, D0		  ; 2 * $18 is an ASCII '0'
+		LSL.B	#1, D2			  ; Add an extend bit and it becomes a '1'
 		ADDX.B	D0, D0
 		BSR.W	OUTCH
 		DBRA	D1, .LOOP
@@ -899,19 +942,19 @@ DUMPREGSDIS	BSR     DUMPREGSNPC
 
 ; Dump registers without disassembly
 ; Does not destroy INBUF or registers		
-DUMPREGS	MOVEM.L D0-D1/A0, -(SP)
+DUMPREGS	MOVEM.L D0-D1/A0-A1, -(SP)
                 BSR     DUMPREGSNPC     		
 		LEA.L	PCLEGEND, A0		  ; Print PC =
 		BSR.W	OUTS
 		MOVE.L	(USERPC), D0              ; Print PC and disassembly
 		BSR.W	PRHEX8
 		BSR.W   CRLF
-		MOVEM.L (SP)+, D0-D1/A0
+		MOVEM.L (SP)+, D0-D1/A0-A1
 		RTS
         		
 ; Dump the User mode registers without the PC
 DUMPREGSNPC	MOVEQ	#0, D1			 ; Register index
-		LEA	USERD0, A0
+		LEA	USERD0, A1
 .NEXT		BSR.S	DUMPREG			 ; Dump one address or data register
 		ADDI	#1, D1
 		MOVE.B	D1, D0
@@ -921,7 +964,6 @@ DUMPREGSNPC	MOVEQ	#0, D1			 ; Register index
 		BSR.W	CRLF
 		CMPI.B	#$10, D1		  ; Do all 16
 		BLT.S	.NEXT
-		BSR.W	CRLF
 		RTS
 
 ;D1 is an index into the User Registers
@@ -943,32 +985,39 @@ DUMPREG		MOVEQ	#2, D0
 		BSR.W	OUTCH
 		MOVE.W	D1, D0
 		LSL.W	#2, D0
-		MOVE.L	(A0, D0.W), D0
+		MOVE.L	(A1, D0.W), D0
 		BSR.W	PRHEX8
 		RTS
 
-; Print the User SR and PC on the right
-; on lines 1, 2 and 4
-RHS		MOVE.B	D1, D0
-		SUBI.B	#4, D0
-		BNE.S	.LINE2
-		MOVE.L	 A0, D0
-		LEA.L	SRBITS, A0		   ; Print the bit names
+; Print the User SR and CCR on the right
+; D0 is 4 * Row number
+RHS             MOVE.L  D1, D0
+                LSR.B   #2, D0
+                SUBQ    #1, D0
+                DBRA    D0, .LINE2
+.LINE1		LEA.L	SRBITS, A0              ; Print the bit names
 		BSR.W	OUTS
-		MOVEA.L D0, A0
 		RTS
-.LINE2		SUBI.B	#4, D0
-		BNE.S	.DONE
-		MOVE.L	A0, D0
-		LEA.L	SRLEGEND, A0		    ; Print SR =
+.LINE2          DBRA    D0, .LINE3
+		LEA.L	SRLEGEND, A0            ; Print SR =
 		BSR.W	OUTS
-		MOVEA.L D0, A0
-		MOVE.W	(USERSR), D0
-		BRA.W	PRBIN			    ; Print SR in binary
+		MOVE.W	USERSR, D0
+		SWAP    D0
+		BRA.W	PRBIN8                  ; Print SR in binary
+.LINE3		DBRA    D0, .LINE4
+                LEA.L	CCRBITS, A0             ; Print the bit names
+		BSR.W	OUTS
+		RTS
+.LINE4		LEA.L	CCRLEGEND, A0           ; Print CCR =
+		BSR.W	OUTS
+		MOVE.W	USERSR, D0
+		BRA.W	PRBIN8                  ; Print CCR in binary
 .DONE           RTS
 
-SRBITS		DC.B	'	     T S  III   XNZVC', 0
-SRLEGEND	DC.B	'    SR = ', 0
+SRBITS		DC.B	'       T S  III', 0
+CCRBITS         DC.B    '          XNZVC', 0
+SRLEGEND	DC.B	'  SR = ', 0
+CCRLEGEND	DC.B	' CCR = ', 0
 PCLEGEND	DC.B	'  PC = ', 0
 
 
@@ -1151,28 +1200,49 @@ T11VEC	       *DC.L	REENTER
 
 T11VEND
 
-BUSERR
-ADDRERR
-ILLEGAL
-*               BTST.B  #5, 1(SP)               ; Test the supervisor flag
-*                BNE     .SUPER
-                MOVEM.L D0-D7/A0-A7, USERD0     ; Save user mode registers
-                MOVE    USP, A0
-                MOVE.L  A0, USERSP
-                MOVE    (SP)+, USERSR
-                MOVE.L  (SP)+, USERPC
-*                MOVEA   USERPC, A0              ; Get faulted instruction
-*                MOVE    (A0), D1
-*                BSR     SWAPBKPTS               ; Swap out the breakpoints
-*                AND     #~$7, D0                ; Test for BKPT instruction
-*                CMP     #BKPT0, D0              ; A breakpoint has been hit
-*                BEQ     .DOBKPT
+; TRAP #0 silently return to monitor 
+TRAP0           BSR     SAVEUREGS
+                BRA     CMDLOOP
+
+UNKNOWN         BSR     SAVEUREGS
+                LEA     DOHMSG, A1
+                BRA     MSGNREGS
+                
+BUSERR          BSR     SAVEUREGS
+                LEA     BUSMSG, A1
+                BRA     MSGNREGS
+                
+ADDRERR         BSR     SAVEUREGS
+                LEA     ADDRMSG, A1
+
+MSGNREGS        BEQ     .USER                   ; Check supervisor mode
+                LEA     SUPERMSG, A0
+                BSR     OUTS
+.USER           MOVE.L  A1, A0
+                BSR     OUTSLN
+                TST.B   M68010
+                BEQ     .SKIPVEC
+                LEA     VECTORMSG, A0
+                BSR     OUTS
+                MOVE    6(SP), D0               ; Get vector format & offset
+                BSR     PRHEX4
+                BSR     CRLF 
+.SKIPVEC        BSR     DUMPREGS
+                BRA     CMDLOOP
+
+ILLEGAL         BSR     SAVEUREGS
+                BNE     .SUPER
+;                MOVEA   USERPC, A0              ; Get faulted instruction into D1
+;                MOVE    (A0), D1
+;                BSR     SWAPBKPTS               ; Swap out the breakpoints
+;                AND     #~$7, D0                ; Test for BKPT instruction
+;                CMP     #BKPT0, D0              ; A breakpoint has been hit
+;                BEQ     .DOBKPT
                 LEA     ILLMSG, A0
                 BSR     OUTSLN
                 BSR     DUMPREGS
                 BRA     CMDLOOP
-
-
+                
 .DOBKPT         MOVEA   BKPTMSG, A0
                 BSR     OUTS
                 AND.B   #7, D1
@@ -1186,6 +1256,8 @@ ILLEGAL
 ; Illegal instruction trap in supervisor mode
 .SUPER          CMP     #MOVECADR, 2(SP)        ; Is this the processor test?
                 BEQ     M68000                  ; We detected an M68000
+                LEA     SUPERMSG, A0
+                BSR     OUTS
                 LEA     ILLMSG, A0
                 BSR     OUTSLN
                 LEA     PCMSG, A0
@@ -1196,6 +1268,18 @@ ILLEGAL
                 BSR     CRLF
                 BRA     CMDLOOP
 
+; Save the user registers if the exception originated in user code
+; Return Z=1 if saved or Z=0 if supervisor mode exception
+; The exception frame is left on the stack
+SAVEUREGS       BTST.B  #5, 4(SP)               ; Test the supervisor flag
+                BNE     .DONE
+                MOVEM.L D0-D7/A0-A6, USERD0     ; Save user mode registers
+                MOVE    USP, A0
+                MOVE.L  A0, USERSP
+                MOVE    4(SP), USERSR           ; Reach over return address
+                MOVE.L  6(SP), USERPC           ; to exeception frame
+                MOVE    #4, CCR
+.DONE           RTS
 
 SWAPBKPTS       MOVEQ   #7, D2
                 LEA     BKPTS, A0
@@ -1220,22 +1304,16 @@ NMI             MOVEA.L #STACK, A7              ; Reset the stack
                 BSR     OUTSLN
                 BRA     CMDLOOP                 ; Re-enter command loop
 
+VECTORMSG       DC.B    'FORMAT/OFFSET = ',0
+BUSMSG          DC.B    'BUS ERROR', 0
+ADDRMSG         DC.B    'ADDRESS ERROR', 0
 ILLMSG          DC.B    'ILLEGAL INSTRUCTION EXCEPTION', 0
+SUPERMSG        DC.B    'SUPERVISOR ', 0
 BKPTMSG         DC.B    'BREAKPOINT ', 0
 PCMSG           DC.B    'PC = ', 0
 NMIMSG          DC.B    'AJBMON WARM START', 0
 DOHMSG          DC.B    'DOH!', 0
                 DS.W    0
-
-UNKNOWN         MOVEM.L D0-D7/A0-A7, USERD0     ; Save user mode registers
-                MOVE    (SP)+, USERSR
-                MOVE.L  (SP)+, USERPC         
-                MOVEA.L #STACK, A7              ; Reset the stack
-                BSR     INITDUART
-                LEA     DOHMSG, A0              ; Print message
-                BSR     OUTSLN
-                BSR     DUMPREGSDIS
-                BRA     CMDLOOP                 ; Re-enter command loop
 
 ; Trace traps will only occur in user code
 ; A trace trap may occur when:
@@ -1280,6 +1358,9 @@ RUNCPM          DC.B    'CP/M-68K V1.3 COPYRIGHT (C) 1982, 1984, 1985 Digital Re
 
 CMDTAB          DC.B    'GO'                    ; Execute user code
                 DC.L    GOCMD
+                
+                DC.B    'TR'                    ; Trace user code
+                DC.L    TRACECMD
 
                 DC.B    'DR'                    ; Dump Registers
                 DC.L    DRCMD
@@ -1287,7 +1368,7 @@ CMDTAB          DC.B    'GO'                    ; Execute user code
                 DC.B    'DM'                    ; Dump Memory
                 DC.L    DMCMD
                 
-                DC.B    'DI'
+                DC.B    'DI'                    ; Disassemble
                 DC.L    DISASMCMD
 
                 DC.B    'SR'                    ; Status Register
@@ -1308,7 +1389,7 @@ CMDTAB          DC.B    'GO'                    ; Execute user code
                 DC.B    'AS'                    ; Assemble
                 DC.L    ASSEMCMD
                 
-                DC.B    'TS'                    ; Assemble
+                DC.B    'TS'                    ; Test command
                 DC.L    TESTCMD
                 
                 DC.W    0
@@ -1326,11 +1407,17 @@ USERPROG        ORG     PROG
                 LEA     USERMSG, A0
                 BSR     OUTSLN
                 MOVE    #1, D1
-                MOVE    #2, D2
+                MOVE    #2, CCR
+                TRAP    #0
                 ILLEGAL
                 
 USERMSG         DC.B    'User code', 0                
 		END	ENTRY		        ; last line of source
+
+
+
+
+
 
 
 
