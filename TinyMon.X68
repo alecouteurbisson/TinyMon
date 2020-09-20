@@ -105,7 +105,7 @@ PROG            EQU     $10000
 		DC.L	UNKNOWN                 * Trap 8
 		DC.L	UNKNOWN                 * Trap 9
 		DC.L	UNKNOWN                 * Trap 10
-		DC.L    TRAP11                  * Trap 11
+		DC.L    UNKNOWN                 * Trap 11
 		DC.L	UNKNOWN                 * Trap 12
 		DC.L	UNKNOWN                 * Trap 13
 		DC.L	UNKNOWN                 * Trap 14
@@ -246,12 +246,12 @@ P10             DC.B    'M68010', 0
 
 GOCMD           ADDA    #2, A0                  ; Move past command
                 BSR     SKIPWS                  ; Space after command
-                BEQ     .GO               
+                BEQ     GO               
                 BSR     PARSENUM
                 TST.B   ERROR
                 BNE     CMDLOOP
                 MOVE.L  D1, USERPC              ; Update PC
-.GO             TST.B   M68010
+GO              TST.B   M68010
                 BEQ     .NOFMT
                 MOVE    #$0024, -(SP)           ; Dummy format 0 trace frame
 .NOFMT          MOVE.L  USERPC, -(SP)           ; Push user PC
@@ -267,12 +267,12 @@ GOCMD           ADDA    #2, A0                  ; Move past command
 ;
 TRACECMD        ADDA    #2, A0                  ; Move past command
                 BSR     SKIPWS                  ; Space after command
-                BEQ     .GO               
+                BEQ     RETRACE               
                 BSR     PARSENUM
                 TST.B   ERROR
                 BNE     CMDLOOP
                 MOVE.L  D1, USERPC              ; Update PC
-.GO             TST.B   M68010
+RETRACE         TST.B   M68010
                 BEQ     .NOFMT
                 MOVE    #$0024, -(SP)           ; Dummy format 0 trace frame
 .NOFMT          MOVE.L  USERPC, -(SP)           ; Push user PC
@@ -283,7 +283,19 @@ TRACECMD        ADDA    #2, A0                  ; Move past command
                 MOVE.L  USERSP, A0
                 MOVE.L  A0, USP
                 MOVEM.L USERD0, D0-D7/A0-A6     ; Restore registers
-                RTE 
+                RTE
+
+; Trace exception comes here
+; Press space or enter to trace again
+; Press 'G' or 'g' to GO from the current PC
+; Press any other key to return to the command prompt
+TRACERPT        BSR     GETCH
+                CMP.B   #' ', D0
+                BLS     RETRACE
+                AND.B   #~$40, D0               ; Ignore case
+                CMP.B   #'G', D0
+                BEQ     GO
+                BRA     CMDLOOP  
                         
 ; Read/modify registers
 ;
@@ -738,8 +750,8 @@ INITDUART	MOVEA.L #DUART, A6		; A6 points at DUART base
 		MOVEQ	#$05, D0
 		MOVE.B	D0, CRA(A6)		; Write $05 to CRA - Enable Tx,  Enable Rx
 		MOVE.B	D0, CRB(A6)		; Write $05 to CRB - Enable Tx,  Enable Rx
-.DETECTBAUD	MOVEQ	#$CC, D1		; 38.4k Baud
-.TESTBAUD	MOVE.B	D1, CSRA(A6)		; Write Baud rate to CSRA
+        	MOVEQ	#$CC, D1		; 38.4k Baud
+        	MOVE.B	D1, CSRA(A6)		; Write Baud rate to CSRA
 		MOVE.B	D1, CSRB(A6)		; Write Baud rate to CSRB
 		RTS
 
@@ -795,12 +807,15 @@ GETLINEAUX	MOVEQ	#0, D1
                 BSR.W   CRLF                      ; New line on console
 		RTS				  ; D1 contains the number of characters in the buffer
 
+; Set D0.B if there is an input character waiting
+CHRDY           BTST	#$00, DUART+SRA		  ; Test SRA bit 0 - RxRdy
+                SNE     D0                        ; Flag in D0
+                RTS
 
 ; Get the next input character in DO
 GETCH		BTST	#$00, DUART+SRA		  ; Test SRA bit 0 - RxRdy
 		BEQ.S	GETCH			  ; Loop until ready
 		MOVE.B	DUART+TBA, D0		  ; Get the input character
-		ANDI.B	#$7F, D0		  ; Clear high bit
 		RTS
 
 ; Send the character in D0
@@ -1155,55 +1170,61 @@ SKIPWS          CMP.B   #$0, (A0)
                 BRA     SKIPWS
 .DONE           RTS
 
-
-; TRAP #11
-; Stack contains Trap word arguments PC and SR (6 bytes)
-TRAP11  	MOVE.L	A5, -(A7)		; Push A5
-		MOVE.L	D0, -(A7)		; Push D0
-		MOVEQ	#0, D0
-		MOVEA.L $A(A7), A5		; Get saved PC, which points at the word following the trap instruction
-		MOVE.W	(A5), D0		; Get Trap word
-		ADDQ.L	#2, $A(A7)		; Move return PC past the word
-		LSL.W	#2, D0			; Multiply argument by 4
-		CMPI.L	#T11VEND-T11VEC, D0	; Check if in range
-		BGE.L	.BADARG			; Nope!
-		LEA	T11VEC(PC), A5		; Get base of vector table
-		ADDA.L	D0, A5			; Get vector address
-		MOVEA.L (A5), A5		; Get vector
-		MOVE.L	(A7)+, D0		; Restore D0
-		JSR	(A5)			; Call subroutine at vector address
-		MOVE	SR, -(A7)		; Push SR
-		MOVE.B	1(A7), 7(A7)		; Copy flags to saved flags
-		ADDQ.L	#2, A7			; Drop flags
-		MOVE.L	(A7)+, A5		; Restore A5
-		RTE				; Return to User mode
- ; Invalid Trap #11 command
-.BADARG		MOVE.L (A7)+, D0		; Restore D0
-		MOVE.L (A7)+, A5		; Restore A5
-		MOVEM.L D0-D7/A0-A6, -(A7)	; Save all registers
-; Report error
-		LEA	.T11ERROR, A0
-		BSR.W	OUTS
-.T11ERROR	DC.B	'Trap #11 - vector out of range\r\n', 0
-
-T11VEC	       *DC.L	REENTER
-		DC.L	GETCH
-		DC.L	OUTCH
-		DC.L	GETLINEUSR
-		DC.L	OUTS
-		DC.L    OUTSLN
-		DC.L    CRLF
-		DC.L	PRHEX2
-		DC.L	PRHEX4
-		DC.L	PRHEX8
-		DC.L	SPACES
-
-T11VEND
-
-; TRAP #0 silently return to monitor 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; User I/O routines using TRAP #0 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;          
 TRAP0           BSR     SAVEUREGS
-                BRA     CMDLOOP
+                CMP     #6, D0
+                BHS     BADT0VEC
+                ADD     D0, D0
+                MOVE    T0VEC(PC,D0.W), D0      ; Get vector offset
+                JMP     VBASE(PC,D0.W)          ; Jump to service routine
+                NOP
+                
+T0VEC           DC.W    T0MONITOR-VBASE         ; 0 - Return to monitor
+                DC.W    T0CHRDY-VBASE           ; 1 - Return D1.B = $FF if there is an input character, $00 otherwise
+                DC.W    T0GETCH-VBASE           ; 2 - Wait for and return input character in D1.B
+                DC.W    T0OUTCH-VBASE           ; 3 - Send character in D1.B                
+                DC.W    T0OUTS-VBASE            ; 4 - Send null terminated string at A0
+                DC.W    T0OUTSLN-VBASE          ; 5 - Send null terminated string at A0 followed by CRLF
+                DC.W    T0SPACES-VBASE          ; 6 - Send D1.W spaces
+                
+                
+VBASE
+T0MONITOR       BRA     CMDLOOP
+T0CHRDY         BSR     CHRDY
+                MOVE.B  D0, USERD1+3
+                BRA     TRAP0DONE
+T0GETCH         BSR     GETCH
+                MOVE.B  D0, USERD1+3
+                BRA     TRAP0DONE
+T0OUTCH         MOVE.B  D1, D0
+                BSR     OUTCH
+                BRA     TRAP0DONE
+T0OUTS          BSR     OUTS
+                MOVE.L  A0, USERA0
+                BRA     TRAP0DONE
+T0OUTSLN        BSR     OUTSLN
+                MOVE.L  A0, USERA0
+                BRA     TRAP0DONE
+T0SPACES        MOVE.W  D1, D0
+                BSR     SPACES
+                BRA     TRAP0DONE
+BADT0VEC        LEA     BADT0MSG, A0
+                BSR     OUTSLN    
+TRAP0DONE       MOVE    USP, A0
+                MOVE.L  A0, USERSP
+                MOVEM.L USERD0, D0-D7/A0-A6,    ; Restore registers
+                RTE                             ; ...and return to user code
+                
 
+BADT0MSG        DC.B    'BAD TRAP#0 FUNCTION INDEX', 0
+                DS.W    0
+                
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+; Other exception service routines 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;  
+                
 UNKNOWN         BSR     SAVEUREGS
                 LEA     DOHMSG, A1
                 BRA     MSGNREGS
@@ -1229,6 +1250,26 @@ MSGNREGS        BEQ     .USER                   ; Check supervisor mode
                 BSR     CRLF 
 .SKIPVEC        BSR     DUMPREGS
                 BRA     CMDLOOP
+
+
+                
+                
+; Trace traps will only occur in user code
+; A trace trap may occur when:
+;  1) We are in trace mode
+;     Save registers, dump registers and return to command line
+; 
+;  2) We have continued from a breakpoint
+;     TRACEMODE flag is clear, install breakpoints and continue
+;
+;  3) Both of the above
+;     Continue as 1)
+;
+; 
+TRACE           BSR     SAVEUREGS
+                MOVEA.L #STACK, SP              ; Clear exception stack frame
+                BSR     DUMPREGSDIS
+                BRA     TRACERPT
 
 ILLEGAL         BSR     SAVEUREGS
                 BNE     .SUPER
@@ -1271,11 +1312,12 @@ ILLEGAL         BSR     SAVEUREGS
 ; Save the user registers if the exception originated in user code
 ; Return Z=1 if saved or Z=0 if supervisor mode exception
 ; The exception frame is left on the stack
+; A6 is not preserved
 SAVEUREGS       BTST.B  #5, 4(SP)               ; Test the supervisor flag
                 BNE     .DONE
                 MOVEM.L D0-D7/A0-A6, USERD0     ; Save user mode registers
-                MOVE    USP, A0
-                MOVE.L  A0, USERSP
+                MOVE    USP, A6
+                MOVE.L  A6, USERSP
                 MOVE    4(SP), USERSR           ; Reach over return address
                 MOVE.L  6(SP), USERPC           ; to exeception frame
                 MOVE    #4, CCR
@@ -1315,33 +1357,7 @@ NMIMSG          DC.B    'AJBMON WARM START', 0
 DOHMSG          DC.B    'DOH!', 0
                 DS.W    0
 
-; Trace traps will only occur in user code
-; A trace trap may occur when:
-;  1) We are in trace mode
-;     Save registers, dump registers and return to command line
-; 
-;  2) We have continued from a breakpoint
-;     TRACEMODE flag is clear, install breakpoints and continue
-;
-;  3) Both of the above
-;     Continue as 1)
-;
-; 
-TRACE           MOVEM.L D0-D7/A0-A7, USERD0     ; Save user mode registers
-                TST.B   TRACEMODE
-                BNE     .DOTRACE              
-                BSR     SWAPBKPTS               ; Not tracing, install breakpoints
-                BCLR    #15, (SP)               ; Clear trace flag in SR
-                MOVEM.L USERD0, D0-D7/A0-A7     ; Restore user regs
-                RTE                             ; Continue with breakpoints installed
 
-.DOTRACE        MOVE    (SP)+, USERSR
-                MOVE.L  (SP)+, USERPC
-
-
-
-MAINLOOP
-		BRA.W	GETLINE
 
 HELLO           DC.B    '~~~~~~~~~~~~~~~~~~', CR, LF
 		DC.B	'AJBMON for Tiny68k', CR, LF
@@ -1405,14 +1421,16 @@ ERRORTAB        DC.B    'BAD NUMBER', 0, 0, 0, 0, 0, 0
 
 USERPROG        ORG     PROG
                 LEA     USERMSG, A0
-                BSR     OUTSLN
-                MOVE    #1, D1
+                MOVEQ   #5, D0                  ; Print string with CRLF
+                TRAP    #0
                 MOVE    #2, CCR
+                MOVEQ   #0, D0
                 TRAP    #0
                 ILLEGAL
                 
 USERMSG         DC.B    'User code', 0                
 		END	ENTRY		        ; last line of source
+
 
 
 
