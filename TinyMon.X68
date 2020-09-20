@@ -1,7 +1,7 @@
 *-----------------------------------------------------------
-* Title	     : Tiny68k monitor
+* Title      : Tiny68k monitor
 * Written by : A J Le Couteur Bisson
-* Date	     : 31 Aug 2020
+* Date       : 31 Aug 2020
 * Description:
 *-----------------------------------------------------------
                 OPT     MEX
@@ -10,35 +10,35 @@
 *********************************
 * 68681 Duart Register Addresses
 *********************************
-DUART		EQU	$FFF000			; Base Addr of DUART
-MRA		EQU	$1			; Mode Register A		(R/W)
-SRA		EQU	$3			; Status Register A		(R)
-CSRA		EQU	$3			; Clock Select Register A	(W)
-CRA		EQU	$5			; Commands Register A		(W)
-RBA		EQU	$7			; Receiver Buffer A		(R)
-TBA		EQU	$7			; Transmitter Buffer A		(W)
-ACR		EQU	$9			; Aux. Control Register		(R/W)
-ISR		EQU	$B			; Interrupt Status Register	(R)
-IMR		EQU	$B			; Interrupt Mask Register	(W)
-MRB		EQU	$11			; Mode Register B		(R/W)
-SRB		EQU	$13			; Status Register B		(R)
-CSRB		EQU	$13			; Clock Select Register B	(W)
-CRB		EQU	$15			; Commands Register B		(W)
-RBB		EQU	$17			; Reciever Buffer B		(R)
-TBB		EQU	$17			; Transmitter Buffer B		(W)
-IVR		EQU	$19			; Interrupt Vector Register	(R/W)
-SOPB		EQU	$1D			; Set Output Port Bits Register (W)
+DUART           EQU     $FFF000                 ; Base Addr of DUART
+MRA             EQU     $1                      ; Mode Register A               (R/W)
+SRA             EQU     $3                      ; Status Register A             (R)
+CSRA            EQU     $3                      ; Clock Select Register A       (W)
+CRA             EQU     $5                      ; Commands Register A           (W)
+RBA             EQU     $7                      ; Receiver Buffer A             (R)
+TBA             EQU     $7                      ; Transmitter Buffer A          (W)
+ACR             EQU     $9                      ; Aux. Control Register         (R/W)
+ISR             EQU     $B                      ; Interrupt Status Register     (R)
+IMR             EQU     $B                      ; Interrupt Mask Register       (W)
+MRB             EQU     $11                     ; Mode Register B               (R/W)
+SRB             EQU     $13                     ; Status Register B             (R)
+CSRB            EQU     $13                     ; Clock Select Register B       (W)
+CRB             EQU     $15                     ; Commands Register B           (W)
+RBB             EQU     $17                     ; Reciever Buffer B             (R)
+TBB             EQU     $17                     ; Transmitter Buffer B          (W)
+IVR             EQU     $19                     ; Interrupt Vector Register     (R/W)
+SOPB            EQU     $1D                     ; Set Output Port Bits Register (W)
 COPB            EQU     $1F                     ; Clr Output Port Bits Register (W)
 
 DEV             EQU     0                       ; 1 = Dev mode, 0 = ROM mode
 
                 IFEQ    DEV
 * ROM config
-VECTORS 	EQU	$0
-DATA		EQU	$400                    ; Monitor data area
-START		EQU	DATA+$400
-RAMEND		EQU	$FF7FF0
-STACK		EQU	RAMEND - 2
+VECTORS         EQU     $0
+DATA            EQU     $400                    ; Monitor data area
+START           EQU     DATA+$400
+RAMEND          EQU     $FF7FF0
+STACK           EQU     RAMEND - 2
 USERSTACK       EQU     STACK-$400
 PROG            EQU     $4000
                 ENDC
@@ -47,11 +47,11 @@ PROG            EQU     $4000
 
                 IFNE    DEV
 * Development config
-VECTORS         EQU	$8000
-DATA		EQU	VECTORS+$400
-START		EQU	DATA+$400
-RAMEND		EQU	$FF7FF0
-STACK		EQU	RAMEND-2
+VECTORS         EQU     $8000
+DATA            EQU     VECTORS+$400
+START           EQU     DATA+$400
+RAMEND          EQU     $FF7FF0
+STACK           EQU     RAMEND-2
 USERSTACK       EQU     STACK-$400
 PROG            EQU     $10000
                 ENDC
@@ -60,83 +60,83 @@ PROG            EQU     $10000
 *********************************
 * Vectors
 *********************************
-		ORG	VECTORS
+                ORG     VECTORS
 
-		DC.L	STACK			* Supervisor stack at the top of RAM
-		DC.L	START			* Start address of monitor
-		DC.L	BUSERR			* BERR handler
-		DC.L	ADDRERR			* Address error handler
-		DC.L	ILLEGAL			* Illegal instruction handler also implements breakpoints
-		DC.L	UNKNOWN                 * Zero divide
-		DC.L	UNKNOWN                 * CHK
-		DC.L	UNKNOWN                 * TRAPV
-		DC.L	UNKNOWN                 * Privilege violation
-		DC.L	TRACE			* Trace handling
-		DC.L	UNKNOWN                 * Line A emulation
-		DC.L	UNKNOWN                 * Line B emulation
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Format error
-		DC.L	UNKNOWN                 * Uninitialised interrupt vector
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Reserved
-		DC.L	UNKNOWN                 * Spurious interrupt
-		DC.L	NMI                     * Level 1 interrupt autovector
-		DC.L	NMI                     * Level 2 interrupt autovector
-		DC.L	NMI                     * Level 3 interrupt autovector
-		DC.L	NMI                     * Level 4 interrupt autovector
-		DC.L	NMI                     * Level 5 interrupt autovector
-		DC.L	NMI                     * Level 6 interrupt autovector
-		DC.L	NMI                     * Level 7 interrupt autovector (NMI)
-		DC.L	TRAP0                   * Trap 0
-		DC.L	UNKNOWN                 * Trap 1
-		DC.L	UNKNOWN                 * Trap 2
-		DC.L	UNKNOWN                 * Trap 3
-		DC.L	UNKNOWN                 * Trap 4
-		DC.L	UNKNOWN                 * Trap 5
-		DC.L	UNKNOWN                 * Trap 6
-		DC.L	UNKNOWN                 * Trap 7
-		DC.L	UNKNOWN                 * Trap 8
-		DC.L	UNKNOWN                 * Trap 9
-		DC.L	UNKNOWN                 * Trap 10
-		DC.L    UNKNOWN                 * Trap 11
-		DC.L	UNKNOWN                 * Trap 12
-		DC.L	UNKNOWN                 * Trap 13
-		DC.L	UNKNOWN                 * Trap 14
-		DC.L	UNKNOWN			* Trap 15 implementing EASy68K trap services
-		DCB.L	16,UNKNOWN              * Reserved
-		DCB.L	192,UNKNOWN             * User interrupt vectors		
+                DC.L    STACK                   * Supervisor stack at the top of RAM
+                DC.L    START                   * Start address of monitor
+                DC.L    BUSERR                  * BERR handler
+                DC.L    ADDRERR                 * Address error handler
+                DC.L    ILLEGAL                 * Illegal instruction handler also implements breakpoints
+                DC.L    UNKNOWN                 * Zero divide
+                DC.L    UNKNOWN                 * CHK
+                DC.L    UNKNOWN                 * TRAPV
+                DC.L    UNKNOWN                 * Privilege violation
+                DC.L    TRACE                   * Trace handling
+                DC.L    UNKNOWN                 * Line A emulation
+                DC.L    UNKNOWN                 * Line B emulation
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Format error
+                DC.L    UNKNOWN                 * Uninitialised interrupt vector
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Reserved
+                DC.L    UNKNOWN                 * Spurious interrupt
+                DC.L    NMI                     * Level 1 interrupt autovector
+                DC.L    NMI                     * Level 2 interrupt autovector
+                DC.L    NMI                     * Level 3 interrupt autovector
+                DC.L    NMI                     * Level 4 interrupt autovector
+                DC.L    NMI                     * Level 5 interrupt autovector
+                DC.L    NMI                     * Level 6 interrupt autovector
+                DC.L    NMI                     * Level 7 interrupt autovector (NMI)
+                DC.L    TRAP0                   * Trap 0
+                DC.L    UNKNOWN                 * Trap 1
+                DC.L    UNKNOWN                 * Trap 2
+                DC.L    UNKNOWN                 * Trap 3
+                DC.L    UNKNOWN                 * Trap 4
+                DC.L    UNKNOWN                 * Trap 5
+                DC.L    UNKNOWN                 * Trap 6
+                DC.L    UNKNOWN                 * Trap 7
+                DC.L    UNKNOWN                 * Trap 8
+                DC.L    UNKNOWN                 * Trap 9
+                DC.L    UNKNOWN                 * Trap 10
+                DC.L    UNKNOWN                 * Trap 11
+                DC.L    UNKNOWN                 * Trap 12
+                DC.L    UNKNOWN                 * Trap 13
+                DC.L    UNKNOWN                 * Trap 14
+                DC.L    UNKNOWN                 * Trap 15 implementing EASy68K trap services
+                DCB.L   16,UNKNOWN              * Reserved
+                DCB.L   192,UNKNOWN             * User interrupt vectors                
 
-		ORG DATA
+                ORG DATA
 
 ; User register storage
-USERD0		DS.L	1
-USERD1		DS.L	1
-USERD2		DS.L	1
-USERD3		DS.L	1
-USERD4		DS.L	1
-USERD5		DS.L	1
-USERD6		DS.L	1
-USERD7		DS.L	1
+USERD0          DS.L    1
+USERD1          DS.L    1
+USERD2          DS.L    1
+USERD3          DS.L    1
+USERD4          DS.L    1
+USERD5          DS.L    1
+USERD6          DS.L    1
+USERD7          DS.L    1
 
-USERA0		DS.L	1
-USERA1		DS.L	1
-USERA2		DS.L	1
-USERA3		DS.L	1
-USERA4		DS.L	1
-USERA5		DS.L	1
-USERA6		DS.L	1
+USERA0          DS.L    1
+USERA1          DS.L    1
+USERA2          DS.L    1
+USERA3          DS.L    1
+USERA4          DS.L    1
+USERA5          DS.L    1
+USERA6          DS.L    1
 USERA7
-USERSP          DS.L	1
+USERSP          DS.L    1
 
-USERPC		DS.L	1
-USERSR		DS.W	1
+USERPC          DS.L    1
+USERSR          DS.W    1
 
 
 BKPTS           DS.L    8                       ; Breakpoint addresses (0 if not set)
@@ -145,18 +145,18 @@ BKPTSON         DC.B    1                       ; Set if breakpoints are install
 SETPKPTS        DC.B    1                       ; Set if we need to install the breakpoints
 TRACEMODE       DC.B    1
 
-ERROR		DS.B	1                       ; Error code for monitor commands
+ERROR           DS.B    1                       ; Error code for monitor commands
 
                 DS.W    0
-LA2427   	DS.B 	1			* head
-LA1623   	DS.B 	1			* cylinder high
-LA815    	DS.B 	1			* cylinder low
-LA07     	DS.B 	1			* sector
+LA2427          DS.B    1                       * head
+LA1623          DS.B    1                       * cylinder high
+LA815           DS.B    1                       * cylinder low
+LA07            DS.B    1                       * sector
 
                 DS.W    0
 
-INBUFSZ		EQU	80                      ; User input buffer
-INBUF		DS.B	INBUFSZ+2
+INBUFSZ         EQU     80                      ; User input buffer
+INBUF           DS.B    INBUFSZ+2
 
 ASMBUFSZ        EQU     80
 ASMBUF          DS.B    ASMBUFSZ+2
@@ -172,37 +172,37 @@ M68010          DS.B    1                       ; Set if 68010 processor
 BKPT0           EQU     $4848                   ; BKPT #0 instruction
 
 
-BKSP		EQU	$08
-TAB		EQU	$09
-LF		EQU	$0A
-CR		EQU	$0D
-CTRLX		EQU	$18
-ESC		EQU	$1B
-SPACE		EQU	$20
-DELETE		EQU	$7F
+BKSP            EQU     $08
+TAB             EQU     $09
+LF              EQU     $0A
+CR              EQU     $0D
+CTRLX           EQU     $18
+ESC             EQU     $1B
+SPACE           EQU     $20
+DELETE          EQU     $7F
 
 BADNUM          EQU     1
 BADCMD          EQU     2
 
 
-		ORG	START
+                ORG     START
 
-ENTRY:		MOVEA.L #STACK, SP
-                MOVE.L	#VECTORS, D0
+ENTRY:          MOVEA.L #STACK, SP
+                MOVE.L  #VECTORS, D0
                 ST      M68010                  ; Assume a 68010
-MOVECADR        DC.L    $4E7B0801               ; MOVEC	D0, VBR
+MOVECADR        DC.L    $4E7B0801               ; MOVEC D0, VBR
                 BRA     DOINIT
 M68000          MOVEA.L #STACK, SP              ; Clear exception stack frame
                 SF      M68010                  ; Not a 68010
 DOINIT          BSR.W   DATAINIT
-                BSR.W	INITDUART
+                BSR.W   INITDUART
                 BSR.W   CRLF
-		LEA	(HELLO).L, A0           ; Print startup message
-		BSR.W	OUTSLN
-		LEA     P00, A0
-		TST.B   M68010
-		BEQ     .PRPROC
-		LEA     P10, A0
+                LEA     (HELLO).L, A0           ; Print startup message
+                BSR.W   OUTSLN
+                LEA     P00, A0
+                TST.B   M68010
+                BEQ     .PRPROC
+                LEA     P10, A0
 .PRPROC         BSR     OUTSLN
 
 CMDLOOP         MOVEA.L #STACK, SP              ; Reset the stack
@@ -362,10 +362,10 @@ DMCMD           ADDA    #2, A0                  ; Move past command
                 BSR     READARGS                ; Dump memory in hex and ASCII
                 TST.B   ERROR
                 BNE     CMDLOOP                 ; Bail on an error
-		BSR.W	DUMPMEM
-		BSR.W	CRLF
-		BRA     CMDLOOP
-		
+                BSR.W   DUMPMEM
+                BSR.W   CRLF
+                BRA     CMDLOOP
+                
 DISASMCMD       ADDA    #2, A0                  ; Move past command
                 BSR     READARGS                ; Dump memory in hex and ASCII
                 TST.B   ERROR
@@ -375,7 +375,7 @@ DISASMCMD       ADDA    #2, A0                  ; Move past command
                 BSR     OUTSLN
                 CMPA.L  D2, A4
                 BLO     .NEXT
-                BRA	CMDLOOP
+                BRA     CMDLOOP
 
 
 ; Fetch 'start:end' or 'start size' arguments for memory commands
@@ -562,144 +562,144 @@ BOOTCPMCMD      LEA     BOOTCPM, A0             ; print boot CPM message
                 BSR     OUTSLN
                 LEA     $15000,A2               ; clear memory from $15000-$20000
                 MOVE.W  #$B000/4-1, D6          ; ($20000-$15000)/4-1
-CLRMEMBO	MOVE.L	#0,(A2)+                ; clear memory
-		DBRA	D6,CLRMEMBO
-		
-		CLR.L	D5                      ; d5 is checksum of CP/M-68K code
-		MOVE.L	#$40000001, LA2427      ; select logical addressing mode, start from LA 1
-		MOVE.B	LA2427, CF2427          ; write logical address
-		MOVE.B	LA1623, CF1623
-		MOVE.B	LA815, CF815
-		MOVE.B	LA07, CF07              ; least significant address bits
-		LEA	$15000, A2              ; CP/M 68K starts from $15000 to $20000
-		MOVE.W	#$58-1, D6              ; total number of sectors is 0x58
-NEXTSECT	BSR	READCF
-		ADD.L	#1, LA2427              ; next logical address
-		MOVE.B	LA2427, CF2427          ; write logical address
-		MOVE.B	LA1623, CF1623
-		MOVE.B	LA815, CF815
-		MOVE.B	LA07, CF07              ; least significant address bits
-		DBRA	D6, NEXTSECT
-		
-ENDREADCF	LEA	$15000, A2              ; point to first line of CPM
-		CMP.L	#$4EF90001, (A2)+       ; are the first two long words correct?
-		BNE	BADCPM
-		CMP.L	#$50504EF9, (A2)
-		BNE	BADCPM
-		LEA	CRCCPM, A0              ; print checksum accumulated in d5
-		BSR	OUTS                    ; finish sending message out
-		MOVE.L	D5,D0                   ; print content of d5
-		BSR	PRHEX8
-		BSR	CRLF
-		LEA	RUNCPM, A0              ; print execute CP/M message
-		BSR	OUTSLN                  ; finish sending message out before start CPM
-		MOVEQ   #0, D0
-		DC.L    $4E7B0801               ; MOVEC	D0, VBR
-		JMP	$15000                  ; start CP/M will not return
-		
-BADCPM	        LEA	NOCPM, A0               ; print CP/M code does not exist
-		BSR	OUTSLN
-DO_BO9	        BRA	CMDLOOP
+CLRMEMBO        MOVE.L  #0,(A2)+                ; clear memory
+                DBRA    D6,CLRMEMBO
+                
+                CLR.L   D5                      ; d5 is checksum of CP/M-68K code
+                MOVE.L  #$40000001, LA2427      ; select logical addressing mode, start from LA 1
+                MOVE.B  LA2427, CF2427          ; write logical address
+                MOVE.B  LA1623, CF1623
+                MOVE.B  LA815, CF815
+                MOVE.B  LA07, CF07              ; least significant address bits
+                LEA     $15000, A2              ; CP/M 68K starts from $15000 to $20000
+                MOVE.W  #$58-1, D6              ; total number of sectors is 0x58
+NEXTSECT        BSR     READCF
+                ADD.L   #1, LA2427              ; next logical address
+                MOVE.B  LA2427, CF2427          ; write logical address
+                MOVE.B  LA1623, CF1623
+                MOVE.B  LA815, CF815
+                MOVE.B  LA07, CF07              ; least significant address bits
+                DBRA    D6, NEXTSECT
+                
+ENDREADCF       LEA     $15000, A2              ; point to first line of CPM
+                CMP.L   #$4EF90001, (A2)+       ; are the first two long words correct?
+                BNE     BADCPM
+                CMP.L   #$50504EF9, (A2)
+                BNE     BADCPM
+                LEA     CRCCPM, A0              ; print checksum accumulated in d5
+                BSR     OUTS                    ; finish sending message out
+                MOVE.L  D5,D0                   ; print content of d5
+                BSR     PRHEX8
+                BSR     CRLF
+                LEA     RUNCPM, A0              ; print execute CP/M message
+                BSR     OUTSLN                  ; finish sending message out before start CPM
+                MOVEQ   #0, D0
+                DC.L    $4E7B0801               ; MOVEC D0, VBR
+                JMP     $15000                  ; start CP/M will not return
+                
+BADCPM          LEA     NOCPM, A0               ; print CP/M code does not exist
+                BSR     OUTSLN
+DO_BO9          BRA     CMDLOOP
 
 ; read a sector of CF data, accumulate checksum in d5
-READCF:	        MOVE.L	D7,-(SP)                ; save d7
-		MOVEQ	#0, D7                  ; clear d7
-		MOVE.B	#1, CFSECTCNT           ; read one sector count
-		MOVE.B	#$20, CFSTAT            ; read sector command
-CHKDRQ          BTST.B	#3, CFSTAT              ; check data request bit set before reading
-		BEQ	CHKDRQ
-		MOVE.W	#$FF ,D2                ; read 512 bytes
-READCF1		MOVE.W	CFDATA, D7              ; get data and put in destination
-		MOVE.W	D7, (A2)+
-		ADD.L	D7, D5                  ; accumulate checksum
-		DBRA	D2, READCF1
-		MOVE.L	(SP)+, D7               ; restore d7
-		RTS
+READCF:         MOVE.L  D7,-(SP)                ; save d7
+                MOVEQ   #0, D7                  ; clear d7
+                MOVE.B  #1, CFSECTCNT           ; read one sector count
+                MOVE.B  #$20, CFSTAT            ; read sector command
+CHKDRQ          BTST.B  #3, CFSTAT              ; check data request bit set before reading
+                BEQ     CHKDRQ
+                MOVE.W  #$FF ,D2                ; read 512 bytes
+READCF1         MOVE.W  CFDATA, D7              ; get data and put in destination
+                MOVE.W  D7, (A2)+
+                ADD.L   D7, D5                  ; accumulate checksum
+                DBRA    D2, READCF1
+                MOVE.L  (SP)+, D7               ; restore d7
+                RTS
 
 ; Disassemble one instruction at (A4)
 ; Return pointer to disassembly in (A0)
 ; A4 is updated to point at the next instruction
 ; All other registers preserved
 DISASM          MOVEM.L D0-D7/A1-A3/A5-A6, -(SP)
-		MOVE.L  (A4), D0                ; Disassemble instruction at (A4)
-		MOVE.L  4(A4), D1
-		MOVE.L  8(A4), D2
-		LEA     INBUF, A5
-		BSR     DCODE68K
-		MOVEA.L A5, A0                  ; Put zero terminated result in (A0)
-		CLR.B   1(A6)
-		MOVEM.L (SP)+, D0-D7/A1-A3/A5-A6
+                MOVE.L  (A4), D0                ; Disassemble instruction at (A4)
+                MOVE.L  4(A4), D1
+                MOVE.L  8(A4), D2
+                LEA     INBUF, A5
+                BSR     DCODE68K
+                MOVEA.L A5, A0                  ; Put zero terminated result in (A0)
+                CLR.B   1(A6)
+                MOVEM.L (SP)+, D0-D7/A1-A3/A5-A6
                 RTS
 
 ***************************************************************************
 * TEST CODE
 ***************************************************************************
-		MOVE    #20-1, D4               ; Disassemble 20 instructions
-		LEA.L   ENTRY, A4               ; ...from here
-.MORE		MOVE.L  (A4), D0
-		MOVE.L  4(A4), D1
-		MOVE.L  8(A4), D2
-		LEA     INBUF, A5
-		MOVE.W  D4, -(SP)
-		BSR     DCODE68K
-		MOVEA.L A5, A0
-		MOVE.B  #0, 1(A6)
-		BSR     OUTSLN
-		MOVE.W  (SP)+, D4
-		DBRA    D4, .MORE
+                MOVE    #20-1, D4               ; Disassemble 20 instructions
+                LEA.L   ENTRY, A4               ; ...from here
+.MORE           MOVE.L  (A4), D0
+                MOVE.L  4(A4), D1
+                MOVE.L  8(A4), D2
+                LEA     INBUF, A5
+                MOVE.W  D4, -(SP)
+                BSR     DCODE68K
+                MOVEA.L A5, A0
+                MOVE.B  #0, 1(A6)
+                BSR     OUTSLN
+                MOVE.W  (SP)+, D4
+                DBRA    D4, .MORE
 
-		LEA.L   OUTBUF, A3
-		MOVEA.L #$008000, A4
-		LEA.L   ASSEM, A5
-		LEA.L   ASSEMEND, A6
-		BSR     PRREGS
-		BSR     CODE68K
-		BSR     PRREGS
-		LEA.L   OUTBUF, A0               ; Dump memory in hex and ASCII
-		MOVE.L	#$60, D1
-		BSR.W	DUMPMEM
-		BSR.W	CRLF
+                LEA.L   OUTBUF, A3
+                MOVEA.L #$008000, A4
+                LEA.L   ASSEM, A5
+                LEA.L   ASSEMEND, A6
+                BSR     PRREGS
+                BSR     CODE68K
+                BSR     PRREGS
+                LEA.L   OUTBUF, A0               ; Dump memory in hex and ASCII
+                MOVE.L  #$60, D1
+                BSR.W   DUMPMEM
+                BSR.W   CRLF
 
-.LOOP		BSR.W	GETLINE                 ; Read user input to (A0)
+.LOOP           BSR.W   GETLINE                 ; Read user input to (A0)
                 MOVE.L  A0, -(SP)
                 BSR.W   OUTSLN                  ; Print what the user typed
                 LEA.L   INBUF, A0               ; Dump memory in hex and ASCII
-		MOVE.L	#$20, D1
-		BSR.W	DUMPMEM
+                MOVE.L  #$20, D1
+                BSR.W   DUMPMEM
                 MOVEA.L (SP)+, A0               ; Point back at the input
                 BSR     PRREGS                  ; Show the registers
-		BSR     PARSENUM                ; Parse the input
-		BSR     PRREGS                  ; Show the registers again
-		MOVE.L  D1, D0                  ; Print the parsed value in D1
-		BSR.W	PRHEX8
-		MOVE    #2, D0                  ; ...a couple of spaces...
-		BSR     SPACES
+                BSR     PARSENUM                ; Parse the input
+                BSR     PRREGS                  ; Show the registers again
+                MOVE.L  D1, D0                  ; Print the parsed value in D1
+                BSR.W   PRHEX8
+                MOVE    #2, D0                  ; ...a couple of spaces...
+                BSR     SPACES
                 MOVE.B  ERROR, D0               ; ...and the error flag
                 BSR     PRHEX2
                 BSR     CRLF
                 MOVE.B  #0, ERROR               ; Clear any error
-		BRA     .LOOP
+                BRA     .LOOP
 
 
 
 
 
 
-		BSR.W	OUTSLN                  ; Print it back
-		MOVE.W	D1, D0                  ; Print number of characters typed in hex
-		BSR.W	PRHEX4
-		BSR.W	CRLF
-		BSR.W	CRLF
-		BSR.W	DUMPREGS                ; Dump the user registers
-		MOVEA.L #$500, A0               ; Dump memory in hex and ASCII
-		MOVE.L	#$100, D1
-		BSR.W	DUMPMEM
-		BSR.W	CRLF
-		MOVE.W	#$A5C7, D0              ; Dump binary
-		BSR.W	PRBIN16
-		BSR     CRLF
-		TRAP	#11
-		DC.W	0
+                BSR.W   OUTSLN                  ; Print it back
+                MOVE.W  D1, D0                  ; Print number of characters typed in hex
+                BSR.W   PRHEX4
+                BSR.W   CRLF
+                BSR.W   CRLF
+                BSR.W   DUMPREGS                ; Dump the user registers
+                MOVEA.L #$500, A0               ; Dump memory in hex and ASCII
+                MOVE.L  #$100, D1
+                BSR.W   DUMPMEM
+                BSR.W   CRLF
+                MOVE.W  #$A5C7, D0              ; Dump binary
+                BSR.W   PRBIN16
+                BSR     CRLF
+                TRAP    #11
+                DC.W    0
 
 ASSEM           DC.B    '    MULU    D2,D3'
 ASSEMEND        DC.B    0
@@ -709,7 +709,7 @@ OUTBUF          DS.B    82
 
 
 ; FOR DEBUGGING THE MONITOR
-PRREGS          MOVEM.L D0-D7/A0-A6, USERD0	; Save Registers
+PRREGS          MOVEM.L D0-D7/A0-A6, USERD0     ; Save Registers
                 MOVE    SR, USERSR
                 BSR     DUMPREGS
                 MOVEM.L USERD0, D0-D7/A0-A6
@@ -718,13 +718,13 @@ PRREGS          MOVEM.L D0-D7/A0-A6, USERD0	; Save Registers
 
 
 ; Initialise data area
-DATAINIT	LEA	(USERD0).L, A0
-		MOVE.W	#(DATAEND-USERD0)/4-1, D0
-.LOOP		MOVE.L	#0, (A0)+
-		DBRA	D0, .LOOP
-		MOVE.W  #7, D0
-		LEA     (BKPTINS+8*2), A0
-		MOVE    #BKPT0+7, D1
+DATAINIT        LEA     (USERD0).L, A0
+                MOVE.W  #(DATAEND-USERD0)/4-1, D0
+.LOOP           MOVE.L  #0, (A0)+
+                DBRA    D0, .LOOP
+                MOVE.W  #7, D0
+                LEA     (BKPTINS+8*2), A0
+                MOVE    #BKPT0+7, D1
 .NEXT           MOVE.W  D1, -(A0)
                 SUBQ    #1, D1
                 DBRA    D0, .NEXT
@@ -732,106 +732,106 @@ DATAINIT	LEA	(USERD0).L, A0
                 MOVE.L  #$20, CONTSIZE
                 MOVE.L  #USERSTACK, USERSP
                 MOVE.L  #PROG, USERPC
-		RTS
+                RTS
 
-INITDUART	MOVEA.L #DUART, A6		; A6 points at DUART base
-		MOVE.B	#$00, IMR(A6)		; Disable all interrupts
-		MOVE.B	#$70, ACR(A6)		; BRG Select = set 1
-		MOVE.B	#$03, SOPB(A6)		; Write $03 to Set Output Port Bits Command (Set OP2-OP7 high)
-		MOVEQ	#$10, D0
-		MOVE.B	D0, CRA(A6)		; Write $10 to CRA Reset MR pointer to MRA1
-		MOVE.B	D0, CRB(A6)		; Write $10 to CRB Reset MR pointer to MRB1
-		MOVEQ	#$13, D0
-		MOVE.B	D0, MRA(A6)		; Write $93 to MRA1 - Error mode = BLOCK,  8 bits/char
-		MOVE.B	D0, MRB(A6)		; Write $93 to MRB1 - Error mode = BLOCK,  8 bits/char
-		MOVEQ	#$17, D0
-		MOVE.B	D0, MRA(A6)		; Write $17 to MRA2 - CTS Enable Tx,  1 stop bit
-		MOVE.B	D0, MRB(A6)		; Write $17 to MRB2 - CTS Enable Tx,  1 stop bit
-		MOVEQ	#$05, D0
-		MOVE.B	D0, CRA(A6)		; Write $05 to CRA - Enable Tx,  Enable Rx
-		MOVE.B	D0, CRB(A6)		; Write $05 to CRB - Enable Tx,  Enable Rx
-        	MOVEQ	#$CC, D1		; 38.4k Baud
-        	MOVE.B	D1, CSRA(A6)		; Write Baud rate to CSRA
-		MOVE.B	D1, CSRB(A6)		; Write Baud rate to CSRB
-		RTS
+INITDUART       MOVEA.L #DUART, A6              ; A6 points at DUART base
+                MOVE.B  #$00, IMR(A6)           ; Disable all interrupts
+                MOVE.B  #$70, ACR(A6)           ; BRG Select = set 1
+                MOVE.B  #$03, SOPB(A6)          ; Write $03 to Set Output Port Bits Command (Set OP2-OP7 high)
+                MOVEQ   #$10, D0
+                MOVE.B  D0, CRA(A6)             ; Write $10 to CRA Reset MR pointer to MRA1
+                MOVE.B  D0, CRB(A6)             ; Write $10 to CRB Reset MR pointer to MRB1
+                MOVEQ   #$13, D0
+                MOVE.B  D0, MRA(A6)             ; Write $93 to MRA1 - Error mode = BLOCK,  8 bits/char
+                MOVE.B  D0, MRB(A6)             ; Write $93 to MRB1 - Error mode = BLOCK,  8 bits/char
+                MOVEQ   #$17, D0
+                MOVE.B  D0, MRA(A6)             ; Write $17 to MRA2 - CTS Enable Tx,  1 stop bit
+                MOVE.B  D0, MRB(A6)             ; Write $17 to MRB2 - CTS Enable Tx,  1 stop bit
+                MOVEQ   #$05, D0
+                MOVE.B  D0, CRA(A6)             ; Write $05 to CRA - Enable Tx,  Enable Rx
+                MOVE.B  D0, CRB(A6)             ; Write $05 to CRB - Enable Tx,  Enable Rx
+                MOVEQ   #$CC, D1                ; 38.4k Baud
+                MOVE.B  D1, CSRA(A6)            ; Write Baud rate to CSRA
+                MOVE.B  D1, CSRB(A6)            ; Write Baud rate to CSRB
+                RTS
 
 
 ; Get a line into the line buffer (user callable)
 ; Buffer pointer in A0, Buffer size in D2,
 ; Returns line length in D1, other registers are preserved
 ; Buffer is null terminated
-GETLINEUSR	MOVE.L D0, -(SP)
-		BSR.S  GETLINEAUX
-		MOVE.L (SP)+, D0
-		RTS
+GETLINEUSR      MOVE.L D0, -(SP)
+                BSR.S  GETLINEAUX
+                MOVE.L (SP)+, D0
+                RTS
 
 ; Get a line into the line buffer INBUF
 ; Returns line length in D1
 ; Buffer is null terminated
-GETLINE		MOVEM.L D0/D2, -(SP)
-                LEA	INBUF, A0
-		MOVE.W	#INBUFSZ, D2
-		BSR.S	GETLINEAUX
-		MOVEM.L (SP)+, D0/D2
-		RTS
+GETLINE         MOVEM.L D0/D2, -(SP)
+                LEA     INBUF, A0
+                MOVE.W  #INBUFSZ, D2
+                BSR.S   GETLINEAUX
+                MOVEM.L (SP)+, D0/D2
+                RTS
 
 ; Common core for system and user line input
-GETLINEAUX	MOVEQ	#0, D1
-.NEXTCH		BSR.S	GETCH
-		CMPI.B	#CR, D0			  ; Terminate on CR
-		BEQ.S	.ENDL
-		CMPI.B	#LF, D0			  ; Ignore LF
-		BEQ.S	.NEXTCH
-		CMPI.B	#DELETE, D0		  ; Delete?
-		BEQ.S	.NEXTCH			  ; Ignore
-		CMPI.B	#BKSP, D0		  ; Backspace?
-		BNE.S	.SKIPCTRL		  ; If not then check for other control characters
-		TST.W	D1			  ; Backspace at start of line is ignored
-		BEQ.S	.NEXTCH
-		SUBI.W	#1, D1			  ; Drop a character in the buffer
-		BSR.S	OUTCH			  ; Echo Backspace
-		MOVE.B	#SPACE, D0		  ; Then Space
-		BSR.S	OUTCH
-		MOVE.B	#BKSP, D0		  ; Then Backspace
-		BSR.S	OUTCH
-		BRA.S	.NEXTCH
-.SKIPCTRL	CMPI.B	#SPACE, D0		  ; Ignore other control characters
-		BLT.S	.NEXTCH
-		CMP.W	D2, D1			  ; Buffer full?
-		BGE.S	.NEXTCH			  ; Yup! Dump the character
-		MOVE.B	D0, (A0, D1.W)		  ; Store character in buffer
-		ADDQ.W	#1, D1			  ; Bump the buffer offset
-		BSR.S	OUTCH			  ; Echo the character
-		BRA.S	.NEXTCH			  ; Back for more
-.ENDL		MOVE.B	#0, (A0, D1.W)		  ; Add a terminating zero
-                BSR.W   CRLF                      ; New line on console
-		RTS				  ; D1 contains the number of characters in the buffer
+GETLINEAUX      MOVEQ   #0, D1
+.NEXTCH         BSR.S   GETCH
+                CMPI.B  #CR, D0                 ; Terminate on CR
+                BEQ.S   .ENDL
+                CMPI.B  #LF, D0                 ; Ignore LF
+                BEQ.S   .NEXTCH
+                CMPI.B  #DELETE, D0             ; Delete?
+                BEQ.S   .NEXTCH                 ; Ignore
+                CMPI.B  #BKSP, D0               ; Backspace?
+                BNE.S   .SKIPCTRL               ; If not then check for other control characters
+                TST.W   D1                      ; Backspace at start of line is ignored
+                BEQ.S   .NEXTCH
+                SUBI.W  #1, D1                  ; Drop a character in the buffer
+                BSR.S   OUTCH                   ; Echo Backspace
+                MOVE.B  #SPACE, D0              ; Then Space
+                BSR.S   OUTCH
+                MOVE.B  #BKSP, D0               ; Then Backspace
+                BSR.S   OUTCH
+                BRA.S   .NEXTCH
+.SKIPCTRL       CMPI.B  #SPACE, D0              ; Ignore other control characters
+                BLT.S   .NEXTCH
+                CMP.W   D2, D1                  ; Buffer full?
+                BGE.S   .NEXTCH                 ; Yup! Dump the character
+                MOVE.B  D0, (A0, D1.W)          ; Store character in buffer
+                ADDQ.W  #1, D1                  ; Bump the buffer offset
+                BSR.S   OUTCH                   ; Echo the character
+                BRA.S   .NEXTCH                 ; Back for more
+.ENDL           MOVE.B  #0, (A0, D1.W)          ; Add a terminating zero
+                BSR.W   CRLF                    ; New line on console
+                RTS                             ; D1 contains the number of characters in the buffer
 
 ; Set D0.B if there is an input character waiting
-CHRDY           BTST	#$00, DUART+SRA		  ; Test SRA bit 0 - RxRdy
-                SNE     D0                        ; Flag in D0
+CHRDY           BTST    #$00, DUART+SRA         ; Test SRA bit 0 - RxRdy
+                SNE     D0                      ; Flag in D0
                 RTS
 
 ; Get the next input character in DO
-GETCH		BTST	#$00, DUART+SRA		  ; Test SRA bit 0 - RxRdy
-		BEQ.S	GETCH			  ; Loop until ready
-		MOVE.B	DUART+TBA, D0		  ; Get the input character
-		RTS
+GETCH           BTST    #$00, DUART+SRA         ; Test SRA bit 0 - RxRdy
+                BEQ.S   GETCH                   ; Loop until ready
+                MOVE.B  DUART+TBA, D0           ; Get the input character
+                RTS
 
 ; Send the character in D0
-OUTCH		BTST	#$02, DUART+SRA		  ; Test SRA bit 2 - TxRdy
-		BEQ.S	OUTCH			  ; Loop until ready
-		MOVE.B	D0, DUART+TBA		  ; Send character
-		RTS
+OUTCH           BTST    #$02, DUART+SRA         ; Test SRA bit 2 - TxRdy
+                BEQ.S   OUTCH                   ; Loop until ready
+                MOVE.B  D0, DUART+TBA           ; Send character
+                RTS
 
 ; Send the null terminated string at A0 leaving A0 pointing at the next byte after the null
-OUTS		MOVE.L	D0, -(SP)		  ; Save D0
-		BRA.S	.SKIP
-.PCH		BSR.W	OUTCH
-.SKIP		MOVE.B	(A0)+, D0
-		BNE.S	.PCH
-		MOVE.L	(SP)+, D0		  ; Restore D0
-		RTS
+OUTS            MOVE.L  D0, -(SP)               ; Save D0
+                BRA.S   .SKIP
+.PCH            BSR.W   OUTCH
+.SKIP           MOVE.B  (A0)+, D0
+                BNE.S   .PCH
+                MOVE.L  (SP)+, D0               ; Restore D0
+                RTS
 
 OUTSLN          BSR     OUTS
                 BRA     CRLF
@@ -840,169 +840,169 @@ OUTSLN          BSR     OUTS
 ; Print, at most, D1 characters leave A0 pointing after the last character output
 ; NOTE: A0 will never be left pointing at a terminating NULL
 ; D1 will remain decremented by the number of characters output + 1, not including the NULL
-OUTSSAFE	MOVE.L	D0, -(SP)		  ; Save D0
-		BRA.S	.SKIP
-.PCH		BSR.W	OUTCH
-.SKIP		MOVE.B	(A0)+, D0
-		DBNE	D1, .PCH
-		CMPI	#0, (A0)
-		BRA	.NOTNULL		  ; Skip over NULL if we just missed it
-		ADDA	#1, A0
-.NOTNULL	MOVE.L	(SP)+, D0		  ; Restore D0
-		RTS
+OUTSSAFE        MOVE.L  D0, -(SP)               ; Save D0
+                BRA.S   .SKIP
+.PCH            BSR.W   OUTCH
+.SKIP           MOVE.B  (A0)+, D0
+                DBNE    D1, .PCH
+                CMPI    #0, (A0)
+                BRA     .NOTNULL                ; Skip over NULL if we just missed it
+                ADDA    #1, A0
+.NOTNULL        MOVE.L  (SP)+, D0               ; Restore D0
+                RTS
 
 ; Output a CR LF to start a new line
-CRLF		MOVE.L	D0, -(SP)
-		MOVE.B	#CR, D0
-		BSR.W	OUTCH
-		MOVE.B	#LF, D0
-		BSR.W	OUTCH
-		MOVE.L	(SP)+, D0
-		RTS
+CRLF            MOVE.L  D0, -(SP)
+                MOVE.B  #CR, D0
+                BSR.W   OUTCH
+                MOVE.B  #LF, D0
+                BSR.W   OUTCH
+                MOVE.L  (SP)+, D0
+                RTS
 
 
 
 ; Print a single hex digit from the 4 LSBs of D0 - Destroys D0
-PRHEXDIGIT	ANDI.B	#$F, D0			  ; Mask digit
-		CMPI.B	#9, D0			  ; Convert
-		BLE.S	.SKIP
-		ADDI.B	#7, D0
-.SKIP		ADDI.B	#'0', D0
-		BSR.W	OUTCH			  ; Print hex digit
-		RTS
+PRHEXDIGIT      ANDI.B  #$F, D0                 ; Mask digit
+                CMPI.B  #9, D0                  ; Convert
+                BLE.S   .SKIP
+                ADDI.B  #7, D0
+.SKIP           ADDI.B  #'0', D0
+                BSR.W   OUTCH                   ; Print hex digit
+                RTS
 
 
 ; Print a hex byte in D0.B - All registers preserved
-PRHEX2		MOVE.L	D0, -(SP)
-		LSR.B	#4, D0
-		BSR.S	PRHEXDIGIT
-		MOVE.L	(SP), D0
-		BSR.S	PRHEXDIGIT
-		MOVE.L	(SP)+, D0
-		RTS
+PRHEX2          MOVE.L  D0, -(SP)
+                LSR.B   #4, D0
+                BSR.S   PRHEXDIGIT
+                MOVE.L  (SP), D0
+                BSR.S   PRHEXDIGIT
+                MOVE.L  (SP)+, D0
+                RTS
 
 ; Print a hex word in D0.W - All registers preserved
-PRHEX4		MOVE.L	D0, -(SP)
-		LSR.W	#8, D0
-		BSR.S	PRHEX2
-		MOVE.L	(SP), D0
-		BSR.S	PRHEX2
-		MOVE.L	(SP)+, D0
-		RTS
+PRHEX4          MOVE.L  D0, -(SP)
+                LSR.W   #8, D0
+                BSR.S   PRHEX2
+                MOVE.L  (SP), D0
+                BSR.S   PRHEX2
+                MOVE.L  (SP)+, D0
+                RTS
 
 ; Print a hex long word in D0.L - All registers preserved
-PRHEX6		SWAP	D0
-		BSR.S	PRHEX2
-		SWAP	D0
-		BSR.S	PRHEX4
-		RTS
-		
+PRHEX6          SWAP    D0
+                BSR.S   PRHEX2
+                SWAP    D0
+                BSR.S   PRHEX4
+                RTS
+                
 ; Print a hex long word in D0.L - All registers preserved
-PRHEX8		SWAP	D0
-		BSR.S	PRHEX4
-		SWAP	D0
-		BSR.S	PRHEX4
-		RTS
+PRHEX8          SWAP    D0
+                BSR.S   PRHEX4
+                SWAP    D0
+                BSR.S   PRHEX4
+                RTS
 
 ; Print D0.W in binary
-PRBIN16		MOVEM.L D0-D2, -(SP)
-		MOVE.W	D0, D2
-		MOVE.W	#$0F, D1		  ; 16 bits
-.LOOP		MOVE.B	#$18, D0		  ; 2 * $18 is an ASCII '0'
-		LSL.W	#1, D2			  ; Add an extend bit and it becomes a '1'
-		ADDX.B	D0, D0
-		BSR.W	OUTCH
-		DBRA	D1, .LOOP
-		MOVEM.L (SP)+, D0-D2
-		RTS
-		
-		; Print D0.B in binary
-PRBIN8		MOVEM.L D0-D2, -(SP)
-		MOVE.W	D0, D2
-		MOVE.W	#$07, D1		  ; 8 bits
-.LOOP		MOVE.B	#$18, D0		  ; 2 * $18 is an ASCII '0'
-		LSL.B	#1, D2			  ; Add an extend bit and it becomes a '1'
-		ADDX.B	D0, D0
-		BSR.W	OUTCH
-		DBRA	D1, .LOOP
-		MOVEM.L (SP)+, D0-D2
-		RTS
+PRBIN16         MOVEM.L D0-D2, -(SP)
+                MOVE.W  D0, D2
+                MOVE.W  #$0F, D1                ; 16 bits
+.LOOP           MOVE.B  #$18, D0                ; 2 * $18 is an ASCII '0'
+                LSL.W   #1, D2                  ; Add an extend bit and it becomes a '1'
+                ADDX.B  D0, D0
+                BSR.W   OUTCH
+                DBRA    D1, .LOOP
+                MOVEM.L (SP)+, D0-D2
+                RTS
+                
+                ; Print D0.B in binary
+PRBIN8          MOVEM.L D0-D2, -(SP)
+                MOVE.W  D0, D2
+                MOVE.W  #$07, D1                ; 8 bits
+.LOOP           MOVE.B  #$18, D0                ; 2 * $18 is an ASCII '0'
+                LSL.B   #1, D2                  ; Add an extend bit and it becomes a '1'
+                ADDX.B  D0, D0
+                BSR.W   OUTCH
+                DBRA    D1, .LOOP
+                MOVEM.L (SP)+, D0-D2
+                RTS
 
 
 ; Print D0 spaces
-SPACES		MOVE.L  D1, -(SP)
+SPACES          MOVE.L  D1, -(SP)
                 MOVE.W  D0, D1
-		MOVEQ   #SPACE, D0
-		BRA.S   .NEXT
-.LOOP		BSR.W	OUTCH
-.NEXT		DBRA	D1, .LOOP
-		MOVE.L  (SP)+, D1
-		RTS
+                MOVEQ   #SPACE, D0
+                BRA.S   .NEXT
+.LOOP           BSR.W   OUTCH
+.NEXT           DBRA    D1, .LOOP
+                MOVE.L  (SP)+, D1
+                RTS
 
 ; Dump registers and disassemble at PC
 ; Disassembles into INBUF
-DUMPREGSDIS	BSR     DUMPREGSNPC     		
-		LEA.L	PCLEGEND, A0		  ; Print PC =
-		BSR.W	OUTS
-		MOVE.L	(USERPC), A4              ; Print PC and disassembly
-		MOVE.L  (A4), D0
-		MOVE.L  4(A4), D1
-		MOVE.L  8(A4), D2
-		LEA     INBUF, A5
-		BSR     DCODE68K
-		MOVEA.L A5, A0
-		MOVE.B  #0, 1(A6)
-		BSR     OUTSLN
-		RTS
+DUMPREGSDIS     BSR     DUMPREGSNPC                     
+                LEA.L   PCLEGEND, A0            ; Print PC =
+                BSR.W   OUTS
+                MOVE.L  (USERPC), A4            ; Print PC and disassembly
+                MOVE.L  (A4), D0
+                MOVE.L  4(A4), D1
+                MOVE.L  8(A4), D2
+                LEA     INBUF, A5
+                BSR     DCODE68K
+                MOVEA.L A5, A0
+                MOVE.B  #0, 1(A6)
+                BSR     OUTSLN
+                RTS
 
 ; Dump registers without disassembly
-; Does not destroy INBUF or registers		
-DUMPREGS	MOVEM.L D0-D1/A0-A1, -(SP)
-                BSR     DUMPREGSNPC     		
-		LEA.L	PCLEGEND, A0		  ; Print PC =
-		BSR.W	OUTS
-		MOVE.L	(USERPC), D0              ; Print PC and disassembly
-		BSR.W	PRHEX8
-		BSR.W   CRLF
-		MOVEM.L (SP)+, D0-D1/A0-A1
-		RTS
-        		
+; Does not destroy INBUF or registers           
+DUMPREGS        MOVEM.L D0-D1/A0-A1, -(SP)
+                BSR     DUMPREGSNPC                     
+                LEA.L   PCLEGEND, A0            ; Print PC =
+                BSR.W   OUTS
+                MOVE.L  (USERPC), D0            ; Print PC and disassembly
+                BSR.W   PRHEX8
+                BSR.W   CRLF
+                MOVEM.L (SP)+, D0-D1/A0-A1
+                RTS
+                        
 ; Dump the User mode registers without the PC
-DUMPREGSNPC	MOVEQ	#0, D1			 ; Register index
-		LEA	USERD0, A1
-.NEXT		BSR.S	DUMPREG			 ; Dump one address or data register
-		ADDI	#1, D1
-		MOVE.B	D1, D0
-		ANDI.B	#3, D0
-		BNE.S	.NEXT
-		BSR.W	RHS			  ; Print the SR and PC on the RHS
-		BSR.W	CRLF
-		CMPI.B	#$10, D1		  ; Do all 16
-		BLT.S	.NEXT
-		RTS
+DUMPREGSNPC     MOVEQ   #0, D1                  ; Register index
+                LEA     USERD0, A1
+.NEXT           BSR.S   DUMPREG                 ; Dump one address or data register
+                ADDI    #1, D1
+                MOVE.B  D1, D0
+                ANDI.B  #3, D0
+                BNE.S   .NEXT
+                BSR.W   RHS                     ; Print the SR and PC on the RHS
+                BSR.W   CRLF
+                CMPI.B  #$10, D1                ; Do all 16
+                BLT.S   .NEXT
+                RTS
 
 ;D1 is an index into the User Registers
-DUMPREG		MOVEQ	#2, D0
-		BSR.W	SPACES
-		MOVE.B	#'D', D0
-		CMPI.B	#8, D1
-		BLT.S	.DREG
-		MOVE.B	#'A', D0
-.DREG		BSR.W	OUTCH
-		MOVE.B	D1, D0
-		ANDI.B	#7, D0
-		BSR.W	PRHEXDIGIT
-		MOVE.B	#' ', D0
-		BSR.W	OUTCH
-		MOVE.B	#'=', D0
-		BSR.W	OUTCH
-		MOVE.B	#' ', D0
-		BSR.W	OUTCH
-		MOVE.W	D1, D0
-		LSL.W	#2, D0
-		MOVE.L	(A1, D0.W), D0
-		BSR.W	PRHEX8
-		RTS
+DUMPREG         MOVEQ   #2, D0
+                BSR.W   SPACES
+                MOVE.B  #'D', D0
+                CMPI.B  #8, D1
+                BLT.S   .DREG
+                MOVE.B  #'A', D0
+.DREG           BSR.W   OUTCH
+                MOVE.B  D1, D0
+                ANDI.B  #7, D0
+                BSR.W   PRHEXDIGIT
+                MOVE.B  #' ', D0
+                BSR.W   OUTCH
+                MOVE.B  #'=', D0
+                BSR.W   OUTCH
+                MOVE.B  #' ', D0
+                BSR.W   OUTCH
+                MOVE.W  D1, D0
+                LSL.W   #2, D0
+                MOVE.L  (A1, D0.W), D0
+                BSR.W   PRHEX8
+                RTS
 
 ; Print the User SR and CCR on the right
 ; D0 is 4 * Row number
@@ -1010,77 +1010,77 @@ RHS             MOVE.L  D1, D0
                 LSR.B   #2, D0
                 SUBQ    #1, D0
                 DBRA    D0, .LINE2
-.LINE1		LEA.L	SRBITS, A0              ; Print the bit names
-		BSR.W	OUTS
-		RTS
+.LINE1          LEA.L   SRBITS, A0              ; Print the bit names
+                BSR.W   OUTS
+                RTS
 .LINE2          DBRA    D0, .LINE3
-		LEA.L	SRLEGEND, A0            ; Print SR =
-		BSR.W	OUTS
-		MOVE.W	USERSR, D0
-		SWAP    D0
-		BRA.W	PRBIN8                  ; Print SR in binary
-.LINE3		DBRA    D0, .LINE4
-                LEA.L	CCRBITS, A0             ; Print the bit names
-		BSR.W	OUTS
-		RTS
-.LINE4		LEA.L	CCRLEGEND, A0           ; Print CCR =
-		BSR.W	OUTS
-		MOVE.W	USERSR, D0
-		BRA.W	PRBIN8                  ; Print CCR in binary
+                LEA.L   SRLEGEND, A0            ; Print SR =
+                BSR.W   OUTS
+                MOVE.W  USERSR, D0
+                SWAP    D0
+                BRA.W   PRBIN8                  ; Print SR in binary
+.LINE3          DBRA    D0, .LINE4
+                LEA.L   CCRBITS, A0             ; Print the bit names
+                BSR.W   OUTS
+                RTS
+.LINE4          LEA.L   CCRLEGEND, A0           ; Print CCR =
+                BSR.W   OUTS
+                MOVE.W  USERSR, D0
+                BRA.W   PRBIN8                  ; Print CCR in binary
 .DONE           RTS
 
-SRBITS		DC.B	'       T S  III', 0
+SRBITS          DC.B    '       T S  III', 0
 CCRBITS         DC.B    '          XNZVC', 0
-SRLEGEND	DC.B	'  SR = ', 0
-CCRLEGEND	DC.B	' CCR = ', 0
-PCLEGEND	DC.B	'  PC = ', 0
+SRLEGEND        DC.B    '  SR = ', 0
+CCRLEGEND       DC.B    ' CCR = ', 0
+PCLEGEND        DC.B    '  PC = ', 0
 
 
 ; Dump memory from A1 for D1 bytes
-DUMPMEM		MOVEM.L D0-D3, -(SP)
+DUMPMEM         MOVEM.L D0-D3, -(SP)
                 SUBQ    #1, D1
-		MOVEQ	#0, D3
-		MOVE.L	A1, D0
-		ANDI	#$FFFFFFFE, D0		  ; Round to an even address
-		MOVEA.L D0, A1
-.LINE		BSR.W	PRHEX8			  ; Print the address
-		MOVEQ	#4, D0
-		BSR.W	SPACES
-		MOVEQ	#7, D2			  ; Print 8 words
-.LOOP		MOVE.W	(A1)+, D0
-		BSR.W	PRHEX4
-		MOVE.B	#' ', D0
-		BSR.W	OUTCH
-		DBRA	D2, .LOOP
-		SUB.L	#$10, A1		  ; Reset the memory pointer
-		MOVEQ	#$F, D2
-.LOOP2		MOVE.B	(A1)+, D0		  ; Now print 16 ASCII characters
-		BSR.S	PASCII
-		DBRA	D2, .LOOP2
-		BSR.W	CRLF
-		ADDI.B	#1, D3
-		ANDI.B	#7, D3
-		BNE.S	.NOBRK
-		BSR.W	CRLF
-.NOBRK		MOVE.L	A1, D0
-		SUBI.L	#$10, D1
-		BCC.S	.LINE
-		MOVEM.L (SP)+, D0-D3
-		RTS
+                MOVEQ   #0, D3
+                MOVE.L  A1, D0
+                ANDI    #$FFFFFFFE, D0          ; Round to an even address
+                MOVEA.L D0, A1
+.LINE           BSR.W   PRHEX8                  ; Print the address
+                MOVEQ   #4, D0
+                BSR.W   SPACES
+                MOVEQ   #7, D2                  ; Print 8 words
+.LOOP           MOVE.W  (A1)+, D0
+                BSR.W   PRHEX4
+                MOVE.B  #' ', D0
+                BSR.W   OUTCH
+                DBRA    D2, .LOOP
+                SUB.L   #$10, A1                ; Reset the memory pointer
+                MOVEQ   #$F, D2
+.LOOP2          MOVE.B  (A1)+, D0               ; Now print 16 ASCII characters
+                BSR.S   PASCII
+                DBRA    D2, .LOOP2
+                BSR.W   CRLF
+                ADDI.B  #1, D3
+                ANDI.B  #7, D3
+                BNE.S   .NOBRK
+                BSR.W   CRLF
+.NOBRK          MOVE.L  A1, D0
+                SUBI.L  #$10, D1
+                BCC.S   .LINE
+                MOVEM.L (SP)+, D0-D3
+                RTS
 
 ; Print a printable ASCII character, otherwise print a dot
-PASCII		CMPI.B	#DELETE, D0
-		BGE.S	.DOT
-		CMPI.B	#SPACE, D0
-		BLT.S	.DOT
-		BRA.W	OUTCH
-.DOT		MOVE.B	#'.', D0
-		BRA.W	OUTCH
+PASCII          CMPI.B  #DELETE, D0
+                BGE.S   .DOT
+                CMPI.B  #SPACE, D0
+                BLT.S   .DOT
+                BRA.W   OUTCH
+.DOT            MOVE.B  #'.', D0
+                BRA.W   OUTCH
 
 ; Parse the numerical value at A0 until the next space or null
-;	&10		= decimal 10
-;	$FF		= hex FF
-;	F06A		= hex F06A (default)
+;       &10             = decimal 10
+;       $FF             = hex FF
+;       F06A            = hex F06A (default)
 ; Result in D1
 ; A0 points at next unparsed character
 ;
@@ -1145,13 +1145,13 @@ PARSEDIG        ANDI    #$FF, D0                ; Zero out the high bits
                 BMI.S   .NOT
                 CMP     #'9', D0                ; If <= 9 then it's decimal
                 BLE.S   .DEC
-                ANDI.B	#~$20, D0               ; Convert to upper case
-                SUB 	#'A', D0                ; 'A' -> 0
-		BMI	.NOT                    ; Reject lower
-		CMP 	#$5, D0                 ; Reject more than 5
-		BGT	.NOT
-		ADD.B   #10, D0                 ; Adjust hex values to 10-15
-		RTS
+                ANDI.B  #~$20, D0               ; Convert to upper case
+                SUB     #'A', D0                ; 'A' -> 0
+                BMI     .NOT                    ; Reject lower
+                CMP     #$5, D0                 ; Reject more than 5
+                BGT     .NOT
+                ADD.B   #10, D0                 ; Adjust hex values to 10-15
+                RTS
 .NOT            MOVE.W  #$FFFF, D0              ; Failed, return negative
                 RTS
 .DEC            SUB.B   #'0', D0                ; Adjust decimal digits to 0-9
@@ -1273,11 +1273,11 @@ TRACE           BSR     SAVEUREGS
 
 ILLEGAL         BSR     SAVEUREGS
                 BNE     .SUPER
-;                MOVEA   USERPC, A0              ; Get faulted instruction into D1
+;                MOVEA   USERPC, A0             ; Get faulted instruction into D1
 ;                MOVE    (A0), D1
-;                BSR     SWAPBKPTS               ; Swap out the breakpoints
-;                AND     #~$7, D0                ; Test for BKPT instruction
-;                CMP     #BKPT0, D0              ; A breakpoint has been hit
+;                BSR     SWAPBKPTS              ; Swap out the breakpoints
+;                AND     #~$7, D0               ; Test for BKPT instruction
+;                CMP     #BKPT0, D0             ; A breakpoint has been hit
 ;                BEQ     .DOBKPT
                 LEA     ILLMSG, A0
                 BSR     OUTSLN
@@ -1360,8 +1360,8 @@ DOHMSG          DC.B    'DOH!', 0
 
 
 HELLO           DC.B    '~~~~~~~~~~~~~~~~~~', CR, LF
-		DC.B	'AJBMON for Tiny68k', CR, LF
-		DC.B    '~~~~~~~~~~~~~~~~~~', 0
+                DC.B    'AJBMON for Tiny68k', CR, LF
+                DC.B    '~~~~~~~~~~~~~~~~~~', 0
 
 PROMPT          DC.B    '~> ', 0
 
@@ -1429,7 +1429,7 @@ USERPROG        ORG     PROG
                 ILLEGAL
                 
 USERMSG         DC.B    'User code', 0                
-		END	ENTRY		        ; last line of source
+                END     ENTRY                   ; last line of source
 
 
 
