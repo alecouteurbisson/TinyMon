@@ -794,6 +794,7 @@ M340     BSR       GETCHARF            GET PAST SPACES               1,1
  
          SUB.L     #1,A5               FORMAT OP-CODE
 M350     BSR       GETCHARF            .                             1,1
+         BSR       UCASE               CONVERT TO UPPER CASE
          MOVE.B    D0,(A0)+
          CMP.B     #'.',D0
          BNE.S     M352
@@ -1820,7 +1821,7 @@ MM80     MOVE.L    PTROP(A1),A5        A5 = POINTER TO SOURCE FIELD
 MM804    BSR       EAALL               SOURCE; ALL MODES ALLOWED
          OR.W      D6,D2
  
-* IF BITE SIZE; "ADDRESS REGISTER DIRECT" NOT ALLOWED
+* IF BYTE SIZE; "ADDRESS REGISTER DIRECT" NOT ALLOWED
          MOVE.L    D2,D0
          AND.W     #$3000,D0
          CMP.W     #$1000,D0           .                             1,2
@@ -1972,6 +1973,13 @@ MDC      DS        0                   (INDEX 37) .W ONLY ALLOWED
          MOVE.W    D5,D2
          BRA       CMMD2
 
+UCASE    CMP.B     #'a', D0
+         BLO       .DONE
+         CMP.B     #'z', D0
+         BHI       .DONE
+         AND.B     #~$40, D0
+.DONE    RTS
+
 GETDECNU MOVEM.L   D1-D5/A0,-(A7)      DECODE AS A DECIMAL NUMBER
          MOVE.L    #10,D3              D3 = BASE (DECIMAL)
          BRA.S     GETN20
@@ -2053,6 +2061,8 @@ GETN95   MOVEM.L   (A7)+,D1-D5/A0      RESTORE SOME REGISTERS
          RTS 
          
 GETNDATA DC.B      ' (+,-.:;=^]',0      TERMINATE CHARS
+
+
 
 
 
