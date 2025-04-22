@@ -1278,6 +1278,8 @@ FERROR   DS        0
 *
          MOVE.L    #FOC,D0             .                             1,4
          LEA.L     (A3,D0),A6          .                             1,4
+         CMPI      #$4AFC,(A4)
+         BEQ       ILL
          LEA       MSG111(PC),A5
 FERROR35 MOVE.B    (A5)+,D0
          CMP.B     #EOT,D0
@@ -1285,15 +1287,22 @@ FERROR35 MOVE.B    (A5)+,D0
          MOVE.B    D0,(A6)+
          BRA       FERROR35
 FERROR39 DS        0
-
          MOVE.W    (A4),D0
          BSR       PNT4HX
-
          MOVE.L    #2,D3     SIZE
 
          BRA COMMON
+ILL      LEA       MSGILL(PC),A5
+ILL35    MOVE.B    (A5)+,D0
+         CMP.B     #EOT,D0
+         BEQ.S     ILL39
+         MOVE.B    D0,(A6)+
+         BRA       ILL35
+ILL39    MOVE.L    #2,D3     SIZE
+         BRA COMMON
 
 MSG111   DC.B      'DC.W    $',EOT
+MSGILL   DC.B      'ILLEGAL',EOT
  
 
 KI       DC.W      $4AFB               KNOWN ILLEGAL CODES
@@ -1321,7 +1330,7 @@ TBL      DS        0
          C68       F018,E000,ISHIFT,54           AS
          C68       F0C0,D0C0,FORM10EX,4          ADD       <EA>,A@
          C68       F130,D100,FORM12,53           ADDX
-         C68       F000,D000,FORM10EX,4            ADD
+         C68       F000,D000,FORM10EX,4          ADD
          C68       F1F8,C188,FORM9,50            EXG
          C68       F1F8,C148,FORM8,50            EXG
          C68       F1F8,C140,FORM7,50            EXG
@@ -1330,12 +1339,12 @@ TBL      DS        0
          C68       F1C0,C0C0,FORM6D,47           MULU
          C68       F000,C000,FORM10,2            AND
          C68       F0C0,B0C0,FORM10EX,6          CMP     <EA>,A@
-         C68       F138,B108,FORM12A,46           CMPM
+         C68       F138,B108,FORM12A,46          CMPM
          C68       F100,B100,FORM10,5            EOR
-         C68       F000,B000,FORM10EX,6            CMP
+         C68       F000,B000,FORM10EX,6          CMP
          C68       F0C0,90C0,FORM10EX,44         SUB       <EA>,A@
          C68       F130,9100,FORM12,45           SUBX
-         C68       F000,9000,FORM10EX,44           SUB
+         C68       F000,9000,FORM10EX,44         SUB
          C68       F1F0,8100,FORM12,43           SBCD
          C68       F1C0,81C0,FORM6D,42           DIVS
          C68       F1C0,80C0,FORM6D,41           DIVU
@@ -1344,7 +1353,7 @@ TBL      DS        0
          C68       FF00,6100,IBSR,51             BSR
          C68       FF00,6000,IBSR,65             BRA                 1,3
          C68       F000,6000,ICC,38              B
-         C68       F0F8,50C8,IDBCC,37              DB
+         C68       F0F8,50C8,IDBCC,37            DB
          C68       F0C0,50C0,SCC,36              S
          C68       F100,5100,IQUICK,35           SUBQ
          C68       F100,5000,IQUICK,34           ADDQ
@@ -1352,13 +1361,13 @@ TBL      DS        0
          C68       F1C0,4180,FORM6D,32           CHK
          C68       FFC0,4EC0,FORM11SL,31         JMP                 1,4
          C68       FFC0,4E80,FORM11SL,30         JSR                 1,4
-         C68       FFFF,4E77,SCOMMON,29           RTR
-         C68       FFFF,4E76,SCOMMON,28           TRAPV
-         C68       FFFF,4E75,SCOMMON,27           RTS
-         C68       FFFF,4E73,SCOMMON,26           RTE
-         C68       FFFF,4E72,ISTOP,25             STOP
-         C68       FFFF,4E71,SCOMMON,24           NOP
-         C68       FFFF,4E70,SCOMMON,23           RESET
+         C68       FFFF,4E77,SCOMMON,29          RTR
+         C68       FFFF,4E76,SCOMMON,28          TRAPV
+         C68       FFFF,4E75,SCOMMON,27          RTS
+         C68       FFFF,4E73,SCOMMON,26          RTE
+         C68       FFFF,4E72,ISTOP,25            STOP
+         C68       FFFF,4E71,SCOMMON,24          NOP
+         C68       FFFF,4E70,SCOMMON,23          RESET
          C68       FFF8,4E68,IMVFUSP,60          MOVE FROM USP
          C68       FFF8,4E60,IMVTUSP,60          MOVE TO USP
          C68       FFF8,4E58,FORM5,22            UNLINK

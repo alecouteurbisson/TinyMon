@@ -63,7 +63,7 @@ PROG            EQU     $10000
                 ORG     VECTORS
 
                 DC.L    STACK                   * Supervisor stack at the top of RAM
-                DC.L    START                   * Start address of monitor
+                DC.L    ENTRY                   * Start address of monitor
                 DC.L    BUSERR                  * BERR handler
                 DC.L    ADDRERR                 * Address error handler
                 DC.L    ILLEGAL                 * Illegal instruction handler also implements breakpoints
@@ -185,10 +185,34 @@ DELETE          EQU     $7F
 
 BADNUM          EQU     1
 BADCMD          EQU     2
+NOTWRT          EQU     3
+SRECERR         EQU     4
+CSUMERR         EQU     5
 
 
                 ORG     START
-
+; Fixed vectors for monitor routines
+VGETLINE        BRA     GETLINE
+VGETCH          BRA     GETCH
+VOUTCH          BRA     OUTCH
+VOUTS           BRA     OUTS
+VOUTSLN         BRA     OUTSLN
+VCRLF           BRA     CRLF
+VOUTSSAFE       BRA     OUTSSAFE
+VPRHEXDIGIT     BRA     PRHEXDIGIT
+VPRHEX2         BRA     PRHEX2
+VPRHEX4         BRA     PRHEX4
+VPRHEX6         BRA     PRHEX6
+VPRHEX8         BRA     PRHEX8
+VPRBIN8         BRA     PRBIN8
+VPRBIN16        BRA     PRBIN16
+VPRDEC          BRA     PRDEC
+VPRSDEC         BRA     PRSDEC
+VSPACES         BRA     SPACES
+VSKIPWS         BRA     SKIPWS
+VPARSENUM       BRA     PARSENUM
+                
+                                                
 ENTRY:          MOVEA.L #STACK, SP
                 MOVE.L  #VECTORS, D0
                 ST      M68010                  ; Assume a 68010
@@ -248,7 +272,7 @@ P10             DC.B    'M68010', 0
 HELPCMD         LEA     HELPTXT, A0
                 BSR     OUTS
                 BRA     CMDLOOP
-                          
+                             
 ; Execute user code
 
 GOCMD           ADDA    #2, A0                  ; Move past command
@@ -258,7 +282,8 @@ GOCMD           ADDA    #2, A0                  ; Move past command
                 TST.B   ERROR
                 BNE     CMDLOOP
                 MOVE.L  D1, USERPC              ; Update PC
-GO              TST.B   M68010
+GO              
+                TST.B   M68010
                 BEQ     .NOFMT
                 MOVE    #$0024, -(SP)           ; Dummy format 0 trace frame
 .NOFMT          MOVE.L  USERPC, -(SP)           ; Push user PC
@@ -386,56 +411,65 @@ DISASMCMD       ADDA    #2, A0                  ; Move past command
                 BRA     CMDLOOP
 
 ; Modify memory
-;
+; Insert data at address argument
+; Lines may be hex data with optional spaces after a complete byte
+; or a single quote followed by ASCII text to end of line
+; Spaces in hex data may imply byte, word or long data but alignment is not checked 
 MMCMD           ADDA    #2, A0                  ; Move past command
                 BSR     SKIPWS                  ; Space after command
-                BEQ     .NEXT               
-                BSR     PARSENUM
+                BNE     .PARSEADDR               
+                MOVEA.L CONTINUE, A1
+                BRA     .NEXTLN             
+.PARSEADDR      BSR     PARSENUM
                 TST.B   ERROR
                 BNE     CMDLOOP
-                MOVEA.L D1, A1
-                BRA     .LOOP
-.NEXT           MOVEA.L CONTINUE, A1
-.LOOP           MOVE.L  A1,D0
+                MOVEA.L D1, A1                  ; Initial address
+.NEXTLN         MOVE.L  A1, D0
                 BSR     PRHEX8
-                MOVEQ   #2, D0
+                MOVE    #2, D0
                 BSR     SPACES
                 BSR     GETLINE
                 BSR     SKIPWS
-                BNE     .ARGS
-                MOVE.L  A1, CONTINUE
+                BEQ     CMDLOOP                 ; End on empty line
+                MOVE.B  (A0), D0
+                CMP.B   #$22, D0                ; Test for ASCII input
+                BEQ     .MASCII 
+.NEXT           BSR     SKIPWS                  ; Whitespace allowed after each byte
+                BEQ     .NEXTLN                 ; End of line
+                MOVE.B  (A0)+, D0
+                BSR     PARSEDIG
+                BMI     .ERR
+                LSL     #4, D0
+                MOVE    D0, D1
+                MOVE.B  (A0)+, D0
+                BEQ.S   .ERR                    ; Missing 2nd digit
+                BSR     PARSEDIG
+                BMI.S   .ERR
+                ADD.B   D1, D0                  ; Byte constructed
+                MOVE.B  D0, (A1)
+                CMP.B   (A1)+, D0
+                BNE.S   .NWRT     
+                BRA     .NEXT
+.ERR            MOVE.B  #BADNUM, ERROR          ; Bad hex data
                 BRA     CMDLOOP
-.ARGS           CMPI.B  #'"', (A0)               ; Leading " for ASCII
-                BEQ     .ASCII
-.DIGLOOP        BSR     SKIPWS
-                BEQ     .LOOP
-                MOVE.B  (A0)+, D0
-                BSR     PARSEDIG
-                BMI     .DIGERR
-                MOVE.B  D0, D1
-                LSL.B   #4, D1
-                MOVE.B  (A0)+, D0
-                BSR     PARSEDIG
-                BMI     .DIGERR
-                ADD.B   D0, D1
-                MOVE.B  D1, (A1)+
-                BRA     .DIGLOOP               
-.ASCII          ADDQ.L  #1, A0
-.CHAR           MOVE.B  (A0)+, D0
-                BEQ     .LOOP
-                MOVE.B  D0, (A1)+
-                BRA     .CHAR
-.DIGERR         MOVE.B  #BADNUM, ERROR
-                BRA     CMDLOOP          
+.NWRT           MOVE.B  #NOTWRT, ERROR          ; Address not writable
+                BRA     CMDLOOP
+
+.MASCII         ADDQ    #1, A0                  ; Skip over quote
+.NXTCH          MOVE.B  (A0)+, D0
+                BEQ     .NEXTLN
+                MOVE.B  D0, (A1)
+                CMP.B   (A1)+, D0
+                BNE.S   .NWRT 
+                BRA.S   .NXTCH
 
 ; Fetch 'start:end' or 'start size' arguments for memory commands
-; A1 = Start
+; A0 = Start
 ; D1 = Size
+; D2 = End
 READARGS        BSR     SKIPWS                  ; Space after command
                 BNE     .PARSEARGS               
-                MOVE.L  CONTINUE, D1            ; Continue with previous end and size
-                BCLR    #0, D1                  ; Ensure word boundary
-                MOVEA.L D1, A1
+                MOVEA.L CONTINUE, A1            ; Continue with previous end and size
                 MOVE.L  CONTSIZE, D1
                 BRA     .DONE 
 .PARSEARGS      BSR     PARSENUM
@@ -488,7 +522,7 @@ BPLSTCMD        LEA     (BKPTS), A2
                 BSR     DISASM
                 BSR     OUTSLN
                 BRA     .NEXT
-                
+             
 ************************************************************************
 *                  A3 = STORE POINTER
 *                  A4 = PROGRAM COUNTER
@@ -527,70 +561,191 @@ BPLSTCMD        LEA     (BKPTS), A2
 *         BRA       MMDI22
 *************************************************************************
 
-ASSEMCMD        ADDA    #2, A0                  ; Move past command
-                BSR     SKIPWS                  ; Space after command
-                BNE     .PARSEADDR               
-                MOVEA.L CONTINUE, A4
-                BRA     .NEXT
-.PARSEADDR      BSR     PARSENUM
-                TST.B   ERROR
-                BNE     CMDLOOP
-                MOVEA.L D1, A4                  ; Initial address to A4
-.NEXT           MOVE.L  A4, D0
-                AND.L   #$FFFFFF, D0            ; Set assembly PC high byte to zero
-                MOVEA.L D0, A4
-                BSR     PRHEX6                  ; Prompt with address
-                MOVE    #2, D0
-                BSR     SPACES
-                BSR     GETLINE                 ; Read assembly input
-                MOVEA.L A0, A5                  ; Input to assemble
-                MOVEA.L A0, A6
-                ADDA    D1, A6                  ; End of input
-                LEA     ASMBUF, A3
-                
-                BSR     PRREGS
-                
-                MOVE.L  D1, -(SP)
-                MOVEA.L A5, A1
-                MOVE.L  #80, D1
-                BSR     DUMPMEM
-                MOVE.L  (SP)+, D1
-                
-                BSR     CODE68K                 ; Assemble
-                
-                BSR     PRREGS
-               
-                MOVE.L  D1, -(SP)
-                MOVEA.L A3, A1
-                MOVE.L  #80, D1
-                BSR     DUMPMEM
-                MOVE.L  (SP)+, D1
-                
-                MOVEA.L A3, A0
-                CLR.B   1(A6)                   ; Null terminate
+*ASSEMCMD        ADDA    #2, A0                  ; Move past command
+*                BSR     SKIPWS                  ; Space after command
+*                BNE     .PARSEADDR               
+*                MOVEA.L CONTINUE, A4
+*                BRA     .NEXT
+*.PARSEADDR      BSR     PARSENUM
+*                TST.B   ERROR
+*                BNE     CMDLOOP
+*                MOVEA.L D1, A4                  ; Initial address to A4
+*.NEXT           MOVE.L  A4, D0
+*                AND.L   #$FFFFFF, D0            ; Set assembly PC high byte to zero
+*                MOVEA.L D0, A4
+*                BSR     PRHEX6                  ; Prompt with address
+*                MOVE    #2, D0
+*                BSR     SPACES
+*                BSR     GETLINE                 ; Read assembly input
+*                MOVEA.L A0, A5                  ; Input to assemble
+*                MOVEA.L A0, A6
+*                ADDA    D1, A6                  ; End of input
+*                LEA     ASMBUF, A3
+*                
+*                BSR     PRREGS
+*                
+*                MOVE.L  D1, -(SP)
+*                MOVEA.L A5, A1
+*                MOVE.L  #80, D1
+*                BSR     DUMPMEM
+*                MOVE.L  (SP)+, D1
+*                
+*                BSR     CODE68K                 ; Assemble
+*                
+*                BSR     PRREGS
+*               
+*                MOVE.L  D1, -(SP)
+*                MOVEA.L A3, A1
+*                MOVE.L  #80, D1
+*                BSR     DUMPMEM
+*                MOVE.L  (SP)+, D1
+*                
+*                MOVEA.L A3, A0
+*                CLR.B   1(A6)                   ; Null terminate
+*
+*                BSR     OUTSLN
+*                TST     D7
+*                BEQ     .ASMOK
+*                MOVE    D7, D0
+*                SUBQ    #1, D0
+*                BSR     SPACES
+*                MOVE    #'^', D0
+*                BSR     OUTCH
+*                BSR     CRLF
+*                BRA     .NEXT
+*.ASMOK          MOVE.B  #0, 1(A6)               ; Null terminate
+*                MOVEA.L A3, A0
+*                BSR     OUTSLN
+*                MOVE    D0, (A4)+
+*                SUBQ    #2, D6
+*                BEQ     .NEXT
+*                MOVE    D1, (A4)+
+*                SUBQ    #2, D6
+*                BEQ     .NEXT
+*                MOVE    D2, (A4)+
+*                BRA     .NEXT
 
-                BSR     OUTSLN
-                TST     D7
-                BEQ     .ASMOK
-                MOVE    D7, D0
-                SUBQ    #1, D0
-                BSR     SPACES
-                MOVE    #'^', D0
-                BSR     OUTCH
-                BSR     CRLF
-                BRA     .NEXT
-.ASMOK          MOVE.B  #0, 1(A6)               ; Null terminate
-                MOVEA.L A3, A0
-                BSR     OUTSLN
-                MOVE    D0, (A4)+
-                SUBQ    #2, D6
-                BEQ     .NEXT
-                MOVE    D1, (A4)+
-                SUBQ    #2, D6
-                BEQ     .NEXT
-                MOVE    D2, (A4)+
-                BRA     .NEXT
-             
+; Load S-Records
+SRECCMD         BSR     GETLINE                 ; Get next line
+                CMP.B   #10, D1
+                BMI     SRERR                   ; Line too short
+                CMP.B   #'S', (A0)+
+                BNE     SRERR
+                MOVE    D1, D2                  ; Save line length
+                MOVE.B  (A0)+, D0               ; Get record type
+                CMP.B   #'0', D0
+                BEQ     SRECCMD                 ; Ignore header record
+                CMP.B   #'1', D0                ; 16 bit data record
+                BEQ     S1
+                CMP.B   #'2', D0                ; 24 bit data record
+                BEQ     S2
+                CMP.B   #'5', D0                ; Ignore count record
+                BEQ     SRECCMD 
+                CMP.B   #'8', D0                ; Termination record
+                BEQ     S8 
+                CMP.B   #'9', D0                ; Termination record
+                BEQ     S9
+                BRA     SRERR                   ; Unrecognised cmd
+                
+S1              CLR.L   D4                      ; Clear checksum
+                BSR     GETBYTE
+                MOVE    D0, D3                  ; Save byte count
+                ADDQ    #2, D0
+                LSL     #1, D0
+                CMP     D0, D2                  ; Check line length against count
+                BNE     SRERR
+                BSR     GETWORD
+                MOVEA.L D0, A1                  ; A1 is target address
+                SUBQ    #4, D3                  ; Get data byte count - 1
+                BMI     SRERR
+.LOOP           BSR     GETBYTE
+                MOVE.B  D0, (A1)+
+                DBRA    D3, .LOOP
+                BSR     GETBYTE                 ; Get the checksum
+                CMP.B   #$FF, D4
+                BEQ     SRECCMD
+                BRA     CSERR
+
+
+S2              CLR.L   D4                      ; Clear checksum
+                BSR     GETBYTE
+                MOVE    D0, D3                  ; Save byte count
+                ADDQ    #2, D0
+                LSL     #1, D0
+                CMP     D0, D2                  ; Check line length against count
+                BNE     SRERR
+                BSR     GET24
+                MOVEA.L D0, A1                  ; A1 is target address
+                SUBQ    #5, D3                  ; Get data byte count - 1
+                BMI     SRERR
+.LOOP           BSR     GETBYTE
+                MOVE.B  D0, (A1)+
+                ADD     D0, D4
+                DBRA    D3, .LOOP
+                BSR     GETBYTE                 ; Get the checksum
+                CMP.B   #$FF, D4
+                BEQ     SRECCMD
+CSERR           MOVE.B  #CSUMERR, ERROR
+                BRA     CMDLOOP
+SRERR           MOVE.B  #SRECERR, ERROR
+                BRA     CMDLOOP
+
+S8              CLR.L   D4                      ; Clear checksum
+                BSR     GETBYTE
+                CMP.B   #4, D0
+                BNE     SRERR
+                BSR     GET24
+                MOVE.L  D0, USERPC              ; Store execution address
+                BSR     GETBYTE                 ; Get the checksum
+                CMP.B   #$FF, D4
+                BEQ     CMDLOOP                 ; Done
+                BRA     CSERR
+                
+S9              CLR.L   D4                      ; Clear checksum
+                BSR     GETBYTE
+                CMP     #3, D0
+                BNE     SRERR
+                BSR     GETWORD
+                MOVE.L  D0, USERPC              ; Store execution address
+                BSR     GETBYTE                 ; Get the checksum
+                CMP.B   #$FF, D4
+                BEQ     CMDLOOP                 ; Done
+                BRA     CSERR
+
+GETLONG         BSR     GETWORD
+                SWAP    D0
+                MOVE.L  D0, D1
+                BSR     GETWORD
+                ADD.L   D1, D0
+                RTS
+
+GET24           BSR     GETWORD
+                LSL.L   #8, D0
+                MOVE.L  D0, D1
+                BSR     GETBYTE
+                ADD.L   D1, D0
+                RTS
+
+GETWORD         BSR     GETBYTE
+                LSL     #8, D0
+                MOVE    D0, D1
+                BSR     GETBYTE
+                ADD     D1, D0
+                RTS
+
+GETBYTE         MOVE.B  (A0)+, D0
+                BSR     PARSEDIG
+                BMI     .ERR
+                LSL     #4, D0
+                MOVE    D0, D5
+                MOVE.B  (A0)+, D0
+                BSR     PARSEDIG
+                BMI     .ERR
+                ADD.B   D5, D0
+                ADD.B   D0, D4                    ; Accumulate checksum
+                RTS
+.ERR            MOVE.B  #BADNUM, ERROR
+                BRA     CMDLOOP                   ; Ideally this should swallow input until it stops
 
 * boot CP/M 68K from compact flash
 * The program is stored starting from Logical Address 1
@@ -706,14 +861,14 @@ DATAINIT        LEA     (USERD0).L, A0
 INITDUART       MOVEA.L #DUART, A6              ; A6 points at DUART base
                 MOVE.B  #$00, IMR(A6)           ; Disable all interrupts
                 MOVE.B  #$70, ACR(A6)           ; BRG Select = set 1
-*               MOVE.B  #$03, SOPB(A6)          ; Write $03 to Set Output Port Bits Command (Set OP2-OP7 high)
+                MOVE.B  #$03, SOPB(A6)          ; Write $03 to Set Output Port Bits Command (Set OP2-OP7 high)
                 MOVEQ   #$10, D0
                 MOVE.B  D0, CRA(A6)             ; Write $10 to CRA Reset MR pointer to MRA1
                 MOVE.B  D0, CRB(A6)             ; Write $10 to CRB Reset MR pointer to MRB1
                 MOVE.B  #$93, MRA(A6)           ; Write $93 to MRA1 - RTS enabled, Error mode = BLOCK,  8 bits/char
-                MOVE.B  #$13, MRB(A6)           ; Write $13 to MRB1 - Error mode = BLOCK,  8 bits/char
+                MOVE.B  #$93, MRB(A6)           ; Write $93 to MRB1 - Error mode = BLOCK,  8 bits/char
                 MOVE.B  #$17, MRA(A6)           ; Write $17 to MRA2 - CTS Enable Tx,  1 stop bit
-                MOVE.B  #$07, MRB(A6)           ; Write $07 to MRB2 - 1 stop bit
+                MOVE.B  #$17, MRB(A6)           ; Write $17 to MRB2 - 1 stop bit
                 MOVEQ   #$05, D0
                 MOVE.B  D0, CRA(A6)             ; Write $05 to CRA - Enable Tx,  Enable Rx
                 MOVE.B  D0, CRB(A6)             ; Write $05 to CRB - Enable Tx,  Enable Rx
@@ -896,7 +1051,54 @@ PRBIN8          MOVEM.L D0-D2, -(SP)
                 MOVEM.L (SP)+, D0-D2
                 RTS
 
+; Decimal place values                
+                DC.L    1
+                DC.L    10
+                DC.L    100
+                DC.L    1000
+                DC.L    10000
+                DC.L    100000
+                DC.L    1000000
+                DC.L    10000000
+                DC.L    100000000
+                DC.L    1000000000
+TENTAB
 
+; Print D0 as signed decimal
+PRSDEC          MOVEM.L D0-D2/A0, -(SP)
+                MOVE.L  D0,D1
+                BPL     PRDEC1
+                MOVE.B  #'-', D0
+                BSR     OUTCH
+                NEG.L   D1
+                BRA     PRDEC1
+                
+; Print D0 in decimal
+PRDEC           MOVEM.L D0-D2/A0, -(SP)
+                MOVE.L  D0,D1
+PRDEC1          LEA.L   TENTAB, A0
+                MOVE    #9,D2
+.TENLOOP        CMP.L   -(A0), D1
+                BHI     .DIGITS
+                DBRA    D2, .TENLOOP
+.DIGITS         MOVE.B  #'0', D0
+                TST.L   D1
+                BEQ     .ZEROES
+.DIGLOOP        CMP.L   (A0), D1
+                BLO     .PRDIG
+                SUB.L   (A0), D1   
+                ADDQ.B  #1,D0
+                BRA     .DIGLOOP
+.PRDIG          BSR     OUTCH
+                SUBA    #4, A0
+                TST     D2
+                DBMI    D2, .DIGITS    ; D2 may already be -ve
+.DONE           MOVEM.L (SP)+, D0-D2/A0
+                RTS
+.ZEROES         BSR     OUTCH
+                DBRA    D2, .ZEROES
+                BRA     .DONE
+                
 ; Print D0 spaces
 SPACES          MOVE.L  D1, -(SP)
                 MOVE.W  D0, D1
@@ -929,7 +1131,7 @@ DUMPREGS        MOVEM.L D0-D1/A0-A1, -(SP)
                 BSR     DUMPREGSNPC                     
                 LEA.L   PCLEGEND, A0            ; Print PC =
                 BSR.W   OUTS
-                MOVE.L  (USERPC), D0            ; Print PC and disassembly
+                MOVE.L  (USERPC), D0            ; Print PC
                 BSR.W   PRHEX8
                 BSR.W   CRLF
                 MOVEM.L (SP)+, D0-D1/A0-A1
@@ -1100,13 +1302,13 @@ PARSENUM        MOVEM.L D0/D2-D3, -(SP)
                 BEQ     .OK
                 CMP.B   #':', (A0)              ; or colon
                 BEQ     .OK
-.ERR            MOVE.B  #BADNUM, ERROR          ; Set error flag
 .OK             MOVEM.L (SP)+, D0/D2-D3
                 RTS
-
+.ERR            MOVE.B  #BADNUM, ERROR          ; Set error flag
+                BRA     .OK
 
 ; Parse digit in D0 for numeric input
-; All of [A-Za-z0-9] are parsed to a numeric digit value in D0
+; All of [A-Za-z0-9] are parsed to a numeric digit value in D0.W
 ; Invalid digits return $FFFF and set the N flag in the CCR
 PARSEDIG        ANDI    #$FF, D0                ; Zero out the high bits
                 CMPI.B  #'0', D0                ; Must be at least '0'
@@ -1158,8 +1360,7 @@ T0VEC           DC.W    T0MONITOR-VBASE         ; 0 - Return to monitor
                 DC.W    T0SPACES-VBASE          ; 6 - Send D1.W spaces
                 DC.W    T0HEXLED-VBASE          ; 7 - Write D1.B in hex to the 7-segment LED
                 DC.W    T0LED-VBASE             ; 8 - Write D1.B directly to 7-segment LED
-                DC.W    T0GETCHC-VBASE          ; 9 - If input char ready, return in D1 and set carry else clear carry
-
+                DC.W    T0GETCHC-VBASE          ; 9 - If input char ready, return in D0 else return $00
 T0VECEND        DS.W    0        
                 
 VBASE
@@ -1193,10 +1394,10 @@ T0LED           MOVE.L  #DUART, A0
                 MOVE.B  D1, COPB(A0)
                 BRA     TRAP0DONE
 T0GETCHC        BSR     CHRDY
-                ADDQ.B  #1,D1
-                BEQ     TRAP0DONE               ; No character, carry clear
+                MOVE.B  D0, USERD0+3
+                BEQ     TRAP0DONE               ; No character, return 0
                 BSR     GETCH                   ; Get character
-                ORI.B   #1,CCR                  ; Set carry
+                MOVE.B  D0, USERD0+3
                 BRA     TRAP0DONE
 BADT0VEC        LEA     BADT0MSG, A0
                 BSR     OUTSLN    
@@ -1284,12 +1485,13 @@ TRACE           BSR     SAVEUREGS
 
 ILLEGAL         BSR     SAVEUREGS
                 BNE     .SUPER
-;                MOVEA   USERPC, A0             ; Get faulted instruction into D1
-;                MOVE    (A0), D1
-;                BSR     SWAPBKPTS              ; Swap out the breakpoints
-;                AND     #~$7, D0               ; Test for BKPT instruction
-;                CMP     #BKPT0, D0             ; A breakpoint has been hit
-;                BEQ     .DOBKPT
+                MOVEA   USERPC, A0             ; Get faulted instruction into D3
+                MOVE    -2(A0), D3
+                BSR     SWAPBKPTS              ; Swap out the breakpoints
+                MOVE    D3,D0
+                AND     #~$7, D3               ; Test for BKPT instruction
+                CMP     #BKPT0, D3             ; A breakpoint has been hit
+                BEQ     .DOBKPT
                 LEA     ILLMSG, A0
                 BSR     OUTSLN
                 BSR     DUMPREGS
@@ -1297,9 +1499,8 @@ ILLEGAL         BSR     SAVEUREGS
                 
 .DOBKPT         MOVEA   BKPTMSG, A0
                 BSR     OUTS
-                AND.B   #7, D1
-                ADD.B   #'0', D1
-                MOVE.B  D1, D0
+                AND.B   #7, D0
+                ADD.B   #'0', D0
                 BSR     OUTCH
                 BSR     CRLF          
                 BSR     DUMPREGS
@@ -1419,13 +1620,21 @@ CMDTAB          DC.B    'HE'                    ; Execute user code
                 DC.B    'BO'                    ; Boot CP/M
                 DC.L    BOOTCPMCMD
 
-                DC.B    'AS'                    ; Assemble
-                DC.L    ASSEMCMD
+*               DC.B    'AS'                    ; Assemble
+*               DC.L    ASSEMCMD
+                
+                DC.B    'LS'                    ; Load s-records
+                DC.L    SRECCMD
+                
                 
                 DC.W    0
 
+* Padded to 16 chars
 ERRORTAB        DC.B    'BAD NUMBER', 0, 0, 0, 0, 0, 0
                 DC.B    'BAD COMMAND', 0, 0, 0, 0, 0
+                DC.B    'NOT WRITEABLE', 0, 0, 0
+                DC.B    'S-RECORD ERROR', 0, 0
+                DC.B    'CHECKSUM ERROR', 0, 0
                 DS.W    0
 
 HELPTXT         DC.B    'AJBMon commands', CR, LF
@@ -1434,7 +1643,7 @@ HELPTXT         DC.B    'AJBMon commands', CR, LF
                 DC.B    'ST [addr] - Step from address in user mode', CR, LF
                 DC.B    'DR        - Dump registers', CR, LF
                 DC.B    'DM [blk]  - Dump memory block', CR, LF
-                DC.B    'MM [addr] - Modify memory', CR, LF
+                DC.B    'MM [addr] - Modify memory with hex or "ASCII', CR, LF
                 DC.B    'SR [word] - Display or update status register', CR, LF
                 DC.B    'SP [addr] - Display or update stack pointer', CR, LF
                 DC.B    'PC [addr] - Display or update program counter', CR, LF
@@ -1443,21 +1652,25 @@ HELPTXT         DC.B    'AJBMon commands', CR, LF
                 DC.B    'Bn [addr] - Display or update breakpoint n', CR, LF
                 DC.B    'BL        - List breakpoints', CR, LF
                 DC.B    'DI [blk]  - Disassemble block', CR, LF
-                DC.B    'AS [addr] - Assemble into memory', CR, LF
+*               DC.B    'AS [addr] - Assemble into memory', CR, LF
+                DC.B    'LS        - Load s-records into memory', CR, LF
                 DC.B    'BO        - Boot CP/M68K', CR, LF
 
                 DC.B    'Numeric inputs are hex by default but may be explictly $hex or &decimal', CR, LF
                 DC.B    'Memory block [blk] may be from:to or from size', CR, LF
-                DC.B    'size will default to the previous size, from will default to continue', CR, LF
+                DC.B    'Size will default to the previous size, from will default to continue', CR, LF
                 DC.B    'When stepping, space or enter will step again, g or G will go', CR, LF
                 DC.B    0
                 DS.W    0
                 
                 INCLUDE 'DCODE68K.X68'
 
-                INCLUDE 'CODE68K.X68'
-                
-                END     ENTRY                   ; last line of source
+*               INCLUDE 'CODE68K.X68'
+
+                END     START                   ; last line of source
+
+
+
 
 
 
