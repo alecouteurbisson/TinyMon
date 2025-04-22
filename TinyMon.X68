@@ -211,6 +211,8 @@ VPRSDEC         BRA     PRSDEC
 VSPACES         BRA     SPACES
 VSKIPWS         BRA     SKIPWS
 VPARSENUM       BRA     PARSENUM
+VPARSEDEC       BRA     PARSEDEC
+VPARSEHEX       BRA     PARSEHEX
                 
                                                 
 ENTRY:          MOVEA.L #STACK, SP
@@ -1247,7 +1249,7 @@ PASCII          CMPI.B  #DELETE, D0
 .DOT            MOVE.B  #'.', D0
                 BRA.W   OUTCH
 
-; Parse the numerical value at A0 until the next space or null
+; Parse the numerical value at A0 until the next delimiter
 ;       &10             = decimal 10
 ;       $FF             = hex FF
 ;       F06A            = hex F06A (default)
@@ -1266,7 +1268,38 @@ PARSENUM        MOVEM.L D0/D2-D3, -(SP)
 .NOTDEC         CMP.B   #'$', (A0)              ; $ (optional) indicates hex
                 BNE     .BEGIN
                 ADDQ    #1, A0
-.BEGIN          SF      D3                      ; D3 indicates valid digit seen
+.BEGIN          BSR     PARSE1
+                CMP.B   #SPACE, (A0)            ; Ensure the next character is EOL or whitespace
+                BLS     PARSEOK         
+                CMP.B   #'(', (A0)              ; or open paren
+                BEQ     PARSEOK         
+                CMP.B   #']', (A0)              ; or close bracket
+                BEQ     PARSEOK         
+                CMP.B   #':', (A0)              ; or colon
+                BEQ     PARSEOK         
+PARSEOK         MOVEM.L (SP)+, D0/D2-D3
+                RTS
+PARSEERR        MOVE.B  #BADNUM, ERROR          ; Set error flag
+                BRA     PARSEOK         
+
+; Parse a decimal and hex numbers at A0 until non-digit
+; Result in D1
+; A0 points at next unparsed character
+               
+PARSEDEC        MOVEM.L D0/D2-D3, -(SP)
+                ST      D4                      ; D4 true indicates decimal
+PARSEN          BSR     PARSE1
+                MOVEM.L (SP)+, D0/D2-D3
+                RTS
+                
+PARSEHEX        MOVEM.L D0/D2-D3, -(SP)
+                SF      D4                      ; D4 false indicates hex
+                BRA     PARSEN
+
+
+
+; Core routine to parse a number
+PARSE1          SF      D3                      ; D3 indicates valid digit seen
                 CLR.L   D1                      ; Clear accumulator
                 CLR.L   D0
 .NEXT           MOVE.B  (A0), D0                ; Parse next digit
@@ -1276,37 +1309,26 @@ PARSENUM        MOVEM.L D0/D2-D3, -(SP)
                 TST.B   D4
                 BEQ     .MULHEX
                 CMP.B   #9, D0
-                BGT     .ERR                    ; Not a decimal digit
+                BGT     PARSEERR                ; Not a decimal digit
                 CMP.L   #$1FFFFFFF, D1          ; Ensure we cannot overflow unaware
-                BGT     .ERR
+                BGT     PARSEERR
                 MOVE.L  D1, D2
                 ASL.L   #1, D1                  ; Multiply accumulator by 10
                 ASL.L   #3, D2
                 ADD.L   D2, D1
-                BCS     .ERR
+                BCS     PARSEERR
                 BRA     .ADDDIG
 .MULHEX         CMP.L   #$0FFFFFFF, D1          ; Ensure we cannot overflow unaware
-                BGT     .ERR
+                BGT     PARSEERR
                 ASL.L   #4, D1                  ; Multiply accumulator by 16
 .ADDDIG         ADD.L   D0, D1
-                BCS     .ERR
+                BCS     PARSEERR
                 ST      D3                      ; Valid digit seen
                 BRA     .NEXT
 .DONE           TST.B   D3
-                BEQ     .ERR                    ; No valid digits seen
-                CMP.B   #SPACE, (A0)            ; Ensure the next character is EOL or whitespace
-                BLS     .OK
-                CMP.B   #'(', (A0)              ; or open paren
-                BEQ     .OK
-                CMP.B   #']', (A0)              ; or close bracket
-                BEQ     .OK
-                CMP.B   #':', (A0)              ; or colon
-                BEQ     .OK
-.OK             MOVEM.L (SP)+, D0/D2-D3
+                BEQ     PARSEERR                ; No valid digits seen
                 RTS
-.ERR            MOVE.B  #BADNUM, ERROR          ; Set error flag
-                BRA     .OK
-
+                
 ; Parse digit in D0 for numeric input
 ; All of [A-Za-z0-9] are parsed to a numeric digit value in D0.W
 ; Invalid digits return $FFFF and set the N flag in the CCR
@@ -1668,6 +1690,7 @@ HELPTXT         DC.B    'AJBMon commands', CR, LF
 *               INCLUDE 'CODE68K.X68'
 
                 END     START                   ; last line of source
+
 
 
 
